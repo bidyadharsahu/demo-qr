@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
-import { Mail, Lock, UserX, UserCheck } from 'lucide-react';
-import React, { useState } from 'react';
+import { Mail, Lock, UserCheck } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 const Login = () => {

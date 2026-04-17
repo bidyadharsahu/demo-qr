@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { Search, ShoppingCart, Info, Star, ChevronLeft } from 'lucide-react';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 const categories = ['Signature', 'Starters', 'Mains', 'Desserts', 'Beverages'];
