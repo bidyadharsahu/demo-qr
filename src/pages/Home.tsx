@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion';
-import { ArrowRight, QrCode, Smartphone, BarChart3, Globe } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { QrCode, Smartphone, BarChart3, Globe } from 'lucide-react';
 import './Home.css';
 
 const Home = () => {
@@ -23,27 +22,6 @@ const Home = () => {
             Elevate Your <br />
             <span className="text-gradient">Dining Experience</span>
           </motion.h1>
-          <motion.p 
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-            className="hero-subtitle"
-          >
-            Create a restaurant QR menu and enable contactless ordering for dine-in, takeaway, and room service. The premium choice for luxury hotels and fine dining.
-          </motion.p>
-          <motion.div 
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.4 }}
-            className="hero-cta"
-          >
-            <Link to="/login" className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.1rem' }}>
-              Create Your Menu <ArrowRight size={20} />
-            </Link>
-            <Link to="/menu/demo-venue" className="btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.1rem' }}>
-              View Live Demo
-            </Link>
-          </motion.div>
         </div>
       </section>
 
@@ -83,14 +61,6 @@ const Home = () => {
       
       {/* Dark divider section */}
       <div className="divider"></div>
-      
-      <section className="container text-center" style={{ padding: '80px 24px', paddingBottom: '120px' }}>
-         <h2 style={{ fontSize: '2.5rem', marginBottom: '24px' }}>Trusted by 10,000+ Venues</h2>
-         <p style={{ color: 'var(--text-secondary)', maxWidth: '600px', margin: '0 auto 40px', fontSize: '1.1rem', lineHeight: '1.6' }}>
-           Join top-tier hotels and restaurants globally who have transformed their service speed and ticket sizes.
-         </p>
-         <Link to="/login" className="btn-primary">Get Started For Free</Link>
-      </section>
     </div>
   );
 };

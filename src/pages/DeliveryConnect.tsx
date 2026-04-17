@@ -34,14 +34,6 @@ const DeliveryConnect = () => {
            </div>
 
            <img src="/food_delivery_pos.png" alt="POS Dashboard Match" style={{ width: '100%', maxWidth: '800px', borderRadius: '16px', boxShadow: 'var(--shadow-card)' }} onError={(e) => { e.currentTarget.style.display = 'none'; }}/>
-
-           <div style={{ marginTop: '40px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '24px', width: '100%' }}>
-              {['Oracle Micros', 'Square', 'Deliverect', 'Stripe', 'Clover', 'Lightspeed'].map(sys => (
-                 <div key={sys} className="glass-panel" style={{ padding: '16px', textAlign: 'center', fontWeight: 'bold' }}>
-                    {sys}
-                 </div>
-              ))}
-           </div>
         </div>
       </div>
     </div>

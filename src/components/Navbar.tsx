@@ -14,14 +14,14 @@ const Navbar = () => {
     <nav className="navbar glass-panel">
       <div className="container nav-container">
         <Link to="/" className="nav-logo">
-          <span className="text-gradient">Lumina</span>Menu
+          <span className="text-gradient">NETRIK</span> SHOP
         </Link>
         
         <div className="nav-links desktop-only">
           <Link to="/" className={location.pathname === '/' ? 'active' : ''}>Home</Link>
           <Link to="/qr-menu" className={location.pathname === '/qr-menu' ? 'active' : ''}>QR Menu</Link>
           <Link to="/connect-online-delivery-portals-to-pos" className={location.pathname === '/connect-online-delivery-portals-to-pos' ? 'active' : ''}>POS Connect</Link>
-          <Link to="/pricing">Pricing</Link>
+          <Link to="/pricing" className={location.pathname === '/pricing' ? 'active' : ''}>Pricing</Link>
         </div>
 
         <div className="nav-actions desktop-only">
@@ -39,6 +39,7 @@ const Navbar = () => {
           <Link to="/" onClick={() => setIsOpen(false)}>Home <ChevronRight size={16} /></Link>
           <Link to="/qr-menu" onClick={() => setIsOpen(false)}>QR Menu <ChevronRight size={16} /></Link>
           <Link to="/connect-online-delivery-portals-to-pos" onClick={() => setIsOpen(false)}>POS Connect <ChevronRight size={16} /></Link>
+          <Link to="/pricing" onClick={() => setIsOpen(false)}>Pricing <ChevronRight size={16} /></Link>
           <Link to="/login" onClick={() => setIsOpen(false)}>Sign In <ChevronRight size={16} /></Link>
         </div>
       )}

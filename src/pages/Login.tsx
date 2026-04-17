@@ -1,10 +1,10 @@
 import { motion } from 'framer-motion';
-import { Mail, Lock, UserCheck } from 'lucide-react';
+import { Mail, Lock } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 const Login = () => {
-  const [isLogin, setIsLogin] = useState(true);
+  const [loginMode, setLoginMode] = useState<'central' | 'staff'>('central');
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
@@ -21,20 +21,33 @@ const Login = () => {
       >
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
           <h2 style={{ fontSize: '2rem', marginBottom: '8px' }}>
-            <span className="text-gradient">Lumina</span>Menu
+            <span className="text-gradient">NETRIK</span> SHOP
           </h2>
           <p style={{ color: 'var(--text-secondary)' }}>
-            {isLogin ? 'Welcome back to your dashboard' : 'Create your free account'}
+            {loginMode === 'central' ? 'Central Login' : 'Staff Login'}
           </p>
         </div>
 
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
+          <button
+            type="button"
+            className={loginMode === 'central' ? 'btn-primary' : 'btn-outline'}
+            onClick={() => setLoginMode('central')}
+            style={{ width: '100%', padding: '10px 14px' }}
+          >
+            Central Login
+          </button>
+          <button
+            type="button"
+            className={loginMode === 'staff' ? 'btn-primary' : 'btn-outline'}
+            onClick={() => setLoginMode('staff')}
+            style={{ width: '100%', padding: '10px 14px' }}
+          >
+            Staff Login
+          </button>
+        </div>
+
         <form onSubmit={(e) => e.preventDefault()} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {!isLogin && (
-            <div style={{ position: 'relative' }}>
-               <UserCheck size={20} color="var(--text-secondary)" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)' }} />
-               <input type="text" placeholder="Full Name" style={{ width: '100%', padding: '14px 16px 14px 48px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', color: 'white', fontSize: '1rem', outline: 'none' }} />
-            </div>
-          )}
           <div style={{ position: 'relative' }}>
              <Mail size={20} color="var(--text-secondary)" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)' }} />
              <input type="email" placeholder="Email Address" style={{ width: '100%', padding: '14px 16px 14px 48px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', color: 'white', fontSize: '1rem', outline: 'none' }} />
@@ -44,10 +57,10 @@ const Login = () => {
              <input type="password" placeholder="Password" style={{ width: '100%', padding: '14px 16px 14px 48px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', color: 'white', fontSize: '1rem', outline: 'none' }} />
           </div>
 
-          {isLogin && <div style={{ textAlign: 'right' }}><a href="#" style={{ fontSize: '0.9rem', color: 'var(--accent-gold)' }}>Forgot Password?</a></div>}
+          <div style={{ textAlign: 'right' }}><a href="#" style={{ fontSize: '0.9rem', color: 'var(--accent-gold)' }}>Forgot Password?</a></div>
 
           <button className="btn-primary" style={{ width: '100%', marginTop: '8px' }}>
-            {isLogin ? 'Sign In' : 'Sign Up'}
+            {loginMode === 'central' ? 'Sign In Central' : 'Sign In Staff'}
           </button>
         </form>
 
@@ -61,13 +74,6 @@ const Login = () => {
            <button className="btn-outline" style={{ flex: 1, padding: '10px' }}>Google</button>
            <button className="btn-outline" style={{ flex: 1, padding: '10px' }}>Apple</button>
         </div>
-
-        <p style={{ textAlign: 'center', marginTop: '32px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-          {isLogin ? "Don't have an account? " : "Already have an account? "}
-          <span style={{ color: 'var(--accent-gold)', cursor: 'pointer' }} onClick={() => setIsLogin(!isLogin)}>
-            {isLogin ? 'Sign up' : 'Sign in'}
-          </span>
-        </p>
 
         <p style={{textAlign: 'center', marginTop: '20px'}}>
              <Link to="/" style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', textDecoration: 'underline'}}>Back to Home</Link>
