@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { Lock, ShieldCheck, ChefHat, UserCog, ArrowLeft } from 'lucide-react';
+import { NetrikLogo } from '@/components/netrik-logo';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -51,7 +52,7 @@ export default function LoginPage() {
         <div className="absolute inset-0 bg-gradient-to-tr from-black via-black/70 to-transparent"/>
         <div className="relative h-full flex flex-col justify-between p-12">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-amber-400 to-rose-500 grid place-items-center font-black text-black">N</div>
+            <NetrikLogo className="h-9 w-9"/>
             <span className="font-bold">Netrik Shop</span>
           </Link>
           <div>

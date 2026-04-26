@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Plus, LogOut, Building2, Users, DollarSign, Activity, QrCode, Pencil, Trash2, Copy, ShieldCheck } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
+import { NetrikLogo } from '@/components/netrik-logo';
 
 const SUBSCRIPTIONS = ['Starter', 'Pro', 'Premium', 'Enterprise'];
 const COLORS = ['#fbbf24', '#fb7185', '#34d399', '#60a5fa'];
@@ -78,7 +79,7 @@ export default function CentralAdmin() {
       <header className="border-b border-white/10 sticky top-0 bg-black/60 backdrop-blur z-30">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-amber-400 to-rose-500 grid place-items-center font-black text-black">N</div>
+            <NetrikLogo className="h-10 w-10"/>
             <div>
               <div className="font-bold">Central Admin</div>
               <div className="text-[10px] uppercase tracking-[0.2em] text-amber-300/80">Netrik Shop · HQ</div>

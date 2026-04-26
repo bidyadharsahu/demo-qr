@@ -15,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { LogOut, BarChart3, ClipboardList, UtensilsCrossed, Table2, ChefHat, Plus, Trash2, Pencil, Printer, QrCode, DollarSign, TrendingUp, Download, Clock, CheckCircle2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { NetrikLogo } from '@/components/netrik-logo';
 
 const CATEGORIES = ['Starters', 'Mains', 'Desserts', 'Drinks', 'Specials'];
 const FOOD_IMG = 'https://images.pexels.com/photos/35420084/pexels-photo-35420084.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940';
@@ -147,7 +148,7 @@ export default function ManagerDashboard() {
       <header className="border-b border-white/10 sticky top-0 bg-black/60 backdrop-blur z-30">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-amber-400 to-rose-500 grid place-items-center font-black text-black">N</div>
+            <NetrikLogo className="h-10 w-10"/>
             <div>
               <div className="font-bold">{restaurant.name}</div>
               <div className="text-[10px] uppercase tracking-[0.2em] text-amber-300/80">by Netrik Shop · Manager</div>
