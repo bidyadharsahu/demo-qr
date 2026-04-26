@@ -3,30 +3,8 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { ArrowRight, Bot, QrCode, ChefHat, BarChart3, Utensils, Users, ShieldCheck, Sparkles } from 'lucide-react';
-
-const Logo = ({ className = 'h-10 w-10' }) => (
-  <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" className={className}>
-    <defs>
-      <linearGradient id="ng" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stopColor="#fbbf24"/>
-        <stop offset="60%" stopColor="#fb7185"/>
-        <stop offset="100%" stopColor="#f43f5e"/>
-      </linearGradient>
-      <linearGradient id="ng2" x1="0" y1="1" x2="1" y2="0">
-        <stop offset="0%" stopColor="#0b0b0d"/>
-        <stop offset="100%" stopColor="#1f2937"/>
-      </linearGradient>
-    </defs>
-    <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#ng)"/>
-    <rect x="6" y="6" width="52" height="52" rx="13" fill="url(#ng2)"/>
-    {/* Stylised "N" with a fork accent */}
-    <path d="M20 46 L20 18 L26 18 L40 38 L40 18 L46 18 L46 46 L40 46 L26 26 L26 46 Z" fill="url(#ng)"/>
-    {/* fork tines */}
-    <path d="M48 14 L48 22 M51 14 L51 22 M54 14 L54 22" stroke="#fbbf24" strokeWidth="1.4" strokeLinecap="round"/>
-    <circle cx="51" cy="26" r="1.6" fill="#fbbf24"/>
-  </svg>
-);
+import { ArrowRight, ShieldCheck, Sparkles } from 'lucide-react';
+import { NetrikLogo } from '@/components/netrik-logo';
 
 const HERO = 'https://images.pexels.com/photos/262047/pexels-photo-262047.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940';
 const INTERIOR = 'https://images.pexels.com/photos/32399761/pexels-photo-32399761.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940';
@@ -41,7 +19,7 @@ export default function Home() {
       <header className="sticky top-0 z-50 backdrop-blur bg-black/50 border-b border-white/10">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3">
-            <Logo className="h-10 w-10"/>
+            <NetrikLogo className="h-10 w-10"/>
             <div>
               <div className="font-bold tracking-tight text-lg">Netrik Shop</div>
               <div className="text-[10px] uppercase tracking-[0.2em] text-amber-300/80">Restaurant OS</div>
@@ -87,19 +65,18 @@ export default function Home() {
         </div>
         <div className="mt-14 grid md:grid-cols-3 gap-6">
           {[
-            { i: <Bot className="h-6 w-6"/>, t: 'AI Waiter Bot', d: 'Customers scan a QR, chat with an AI that takes orders, suggests dishes, handles allergies & spice levels — bilingual.', img: DISH },
-            { i: <QrCode className="h-6 w-6"/>, t: 'QR Table Ordering', d: 'Generate printable QR codes per table. Status updates live to Available / Occupied / Paid.', img: CAFE },
-            { i: <ChefHat className="h-6 w-6"/>, t: 'Kitchen Tickets', d: 'Real-time bilingual (EN/ES) tickets streamed to chef screens or printers.', img: CHEF },
-            { i: <BarChart3 className="h-6 w-6"/>, t: 'Live Analytics', d: 'Beautiful dashboards: revenue trends, top-selling items, table turnover, downloadable CSV.', img: INTERIOR },
-            { i: <Utensils className="h-6 w-6"/>, t: 'Smart Menu', d: 'Add dishes with photos, mark availability instantly, customers see updates in real time.', img: DISH },
-            { i: <Users className="h-6 w-6"/>, t: 'Multi-tenant', d: 'One central admin, unlimited restaurants. Each gets a branded panel — “X Restaurant by Netrik Shop”.', img: INTERIOR },
+            { t: 'AI Waiter Bot', d: 'Customers scan a QR, chat with an AI that takes orders, suggests dishes, handles allergies & spice levels — bilingual.', img: DISH },
+            { t: 'QR Table Ordering', d: 'Generate printable QR codes per table. Status updates live to Available / Occupied / Paid.', img: CAFE },
+            { t: 'Kitchen Tickets', d: 'Real-time bilingual (EN/ES) tickets streamed to chef screens or printers.', img: CHEF },
+            { t: 'Live Analytics', d: 'Beautiful dashboards: revenue trends, top-selling items, table turnover, downloadable CSV.', img: INTERIOR },
+            { t: 'Smart Menu', d: 'Add dishes with photos, mark availability instantly, customers see updates in real time.', img: DISH },
+            { t: 'Multi-tenant', d: 'One central admin, unlimited restaurants. Each gets a branded panel — “X Restaurant by Netrik Shop”.', img: INTERIOR },
           ].map((f) => (
             <Card key={f.t} className="bg-white/5 border-white/10 overflow-hidden group hover:bg-white/[0.07] transition-colors">
               <div className="h-40 overflow-hidden">
                 <img src={f.img} alt={f.t} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"/>
               </div>
               <CardContent className="p-6">
-                <div className="h-10 w-10 rounded-xl bg-amber-400/20 text-amber-300 grid place-items-center mb-4">{f.i}</div>
                 <div className="text-lg font-semibold text-white">{f.t}</div>
                 <p className="mt-2 text-sm text-white/60">{f.d}</p>
               </CardContent>

@@ -17,12 +17,589 @@ function stripJson(text) {
   return { actions: null, reply: text };
 }
 
+const DEMO_MENU_IMAGE = 'https://images.pexels.com/photos/35420084/pexels-photo-35420084.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940';
+const DEMO_DB_KEY = '_netrik_demo_db';
+
+const nowIso = () => new Date().toISOString();
+const makeId = (prefix) => `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+const escapeRegExp = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+function getDemoDb() {
+  if (global[DEMO_DB_KEY]) return global[DEMO_DB_KEY];
+
+  const createdAt = nowIso();
+  const demoRestaurantId = 'rest_demo_1';
+  const demoTables = Array.from({ length: 8 }, (_, i) => ({
+    id: `table_demo_${i + 1}`,
+    restaurant_id: demoRestaurantId,
+    number: String(i + 1),
+    seats: i % 2 === 0 ? 4 : 2,
+    status: 'available',
+    created_at: createdAt,
+  }));
+
+  global[DEMO_DB_KEY] = {
+    users: [
+      { id: 'user_demo_central', type: 'central', user_id: 'hello', password: '123456', created_at: createdAt },
+    ],
+    restaurants: [
+      {
+        id: demoRestaurantId,
+        name: 'Netrik Demo Bistro',
+        owner_name: 'Demo Owner',
+        contact: '+1 555 0100',
+        address: '12 Demo Street',
+        domain: 'demo.netrik.shop',
+        subscription: 'Pro',
+        manager_user_id: 'manager_demo',
+        manager_password: '123456',
+        chef_user_id: 'chef_demo',
+        chef_password: '123456',
+        created_at: createdAt,
+        updated_at: createdAt,
+      },
+    ],
+    menu: [
+      {
+        id: 'menu_demo_1',
+        restaurant_id: demoRestaurantId,
+        name: 'Truffle Pasta',
+        name_es: 'Pasta de Trufa',
+        description: 'Creamy truffle pasta with parmesan and cracked pepper.',
+        price: 18.5,
+        category: 'Mains',
+        image: DEMO_MENU_IMAGE,
+        available: true,
+        created_at: createdAt,
+      },
+      {
+        id: 'menu_demo_2',
+        restaurant_id: demoRestaurantId,
+        name: 'Smoked Salmon Toast',
+        name_es: 'Tostada de Salmon Ahumado',
+        description: 'Sourdough toast with smoked salmon, dill cream, and lemon zest.',
+        price: 14,
+        category: 'Starters',
+        image: DEMO_MENU_IMAGE,
+        available: true,
+        created_at: createdAt,
+      },
+      {
+        id: 'menu_demo_3',
+        restaurant_id: demoRestaurantId,
+        name: 'Chocolate Lava Cake',
+        name_es: 'Pastel de Lava de Chocolate',
+        description: 'Warm chocolate center served with vanilla cream.',
+        price: 9,
+        category: 'Desserts',
+        image: DEMO_MENU_IMAGE,
+        available: true,
+        created_at: createdAt,
+      },
+      {
+        id: 'menu_demo_4',
+        restaurant_id: demoRestaurantId,
+        name: 'Citrus Mint Cooler',
+        name_es: 'Refresco de Menta y Citricos',
+        description: 'Fresh citrus, mint, and sparkling water.',
+        price: 6,
+        category: 'Drinks',
+        image: DEMO_MENU_IMAGE,
+        available: true,
+        created_at: createdAt,
+      },
+    ],
+    rest_tables: demoTables,
+    orders: [],
+    feedback: [],
+    chat_sessions: [],
+  };
+
+  return global[DEMO_DB_KEY];
+}
+
+function buildDemoChatReply({ message = '', language = 'en', restaurantName = 'our restaurant', menu = [] }) {
+  const lower = message.toLowerCase();
+  const name = restaurantName || 'our restaurant';
+  const menuNames = menu.slice(0, 3).map((m) => m.name).filter(Boolean);
+  const popular = menuNames.length ? menuNames.join(', ') : 'today\'s chef specials';
+
+  if (/recommend|suggest|special|popular|best/.test(lower)) {
+    return language === 'es'
+      ? `Te recomiendo ${popular}. Si quieres, te ayudo a elegir segun tu apetito o nivel de picante.`
+      : `I recommend ${popular}. If you want, I can tailor choices by appetite and spice level.`;
+  }
+
+  if (/hello|hi|hey|hola/.test(lower)) {
+    return language === 'es'
+      ? `Hola, bienvenido a ${name}. Dime que te apetece y te ayudo a pedir en segundos.`
+      : `Hi, welcome to ${name}. Tell me what you are craving and I will help you order quickly.`;
+  }
+
+  return language === 'es'
+    ? `Perfecto. Puedo ayudarte a agregar platos, bebidas o postres. Si quieres, te sugiero una combinacion equilibrada.`
+    : `Great choice. I can add mains, drinks, or desserts for you. If you want, I can suggest a balanced combo.`;
+}
+
+function extractDemoChatActions(message = '', menu = []) {
+  const lower = message.toLowerCase();
+  const actions = {};
+  const addItems = [];
+
+  for (const item of menu) {
+    const name = String(item.name || '').trim();
+    if (!name) continue;
+    const nameLower = name.toLowerCase();
+    if (!lower.includes(nameLower)) continue;
+
+    const qtyRegex = new RegExp(`(\\d+)\\s*(x|\\*)?\\s*${escapeRegExp(nameLower)}`);
+    const qtyMatch = lower.match(qtyRegex);
+    const quantity = Math.max(1, parseInt(qtyMatch?.[1] || '1', 10));
+    addItems.push({ id: item.id, name: item.name, quantity });
+  }
+
+  if (addItems.length) actions.add_items = addItems;
+
+  if (/extra[- ]?hot/.test(lower)) actions.set_spicy = 'extra-hot';
+  else if (/\bhot\b|picante/.test(lower)) actions.set_spicy = 'hot';
+  else if (/\bmedium\b|medio/.test(lower)) actions.set_spicy = 'medium';
+  else if (/\bmild\b|suave|no spicy/.test(lower)) actions.set_spicy = 'mild';
+
+  if (/allergy|allergic|alerg/.test(lower)) {
+    actions.set_allergy = message.slice(0, 120).trim();
+  }
+
+  return Object.keys(actions).length ? actions : null;
+}
+
+async function handleDemoRequest(path, method, request) {
+  const db = getDemoDb();
+
+  // ============ AUTH ============
+  if (path === 'auth/login' && method === 'POST') {
+    const { type, userId, password } = await request.json();
+    if (!type || !userId || !password) return err('Missing fields');
+
+    if (type === 'central') {
+      const data = db.users.find((u) => u.type === 'central' && u.user_id === userId && u.password === password);
+      if (!data) return err('Invalid credentials', 401);
+      return json({ user: { id: data.id, type: 'central', userId: data.user_id, demoMode: true } });
+    }
+
+    const rest = db.restaurants.find((r) => (
+      (type === 'manager' && r.manager_user_id === userId && r.manager_password === password) ||
+      (type === 'chef' && r.chef_user_id === userId && r.chef_password === password)
+    ));
+    if (!rest) return err('Invalid credentials', 401);
+    return json({ user: { type, userId, restaurantId: rest.id, restaurantName: rest.name, demoMode: true } });
+  }
+
+  // ============ RESTAURANTS ============
+  if (path === 'restaurants' && method === 'GET') {
+    const restaurants = [...db.restaurants].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    return json({ restaurants: restaurants.map(restaurantToApi) });
+  }
+
+  if (path === 'restaurants' && method === 'POST') {
+    const body = await request.json();
+    if (!body.name || !body.ownerName || !body.contact) return err('Missing required fields');
+
+    const s = slug(body.name) + '_' + rand(4);
+    const ts = nowIso();
+    const row = {
+      id: makeId('rest'),
+      name: body.name,
+      owner_name: body.ownerName,
+      contact: body.contact,
+      address: body.address || '',
+      domain: body.domain || '',
+      subscription: body.subscription || 'Pro',
+      manager_user_id: 'manager_' + s,
+      manager_password: randPwd(),
+      chef_user_id: 'chef_' + s,
+      chef_password: randPwd(),
+      created_at: ts,
+      updated_at: ts,
+    };
+    db.restaurants.push(row);
+    return json({ restaurant: restaurantToApi(row) });
+  }
+
+  const restMatch = path.match(/^restaurants\/([^\/]+)$/);
+  if (restMatch) {
+    const id = restMatch[1];
+    const idx = db.restaurants.findIndex((r) => r.id === id);
+    if (idx === -1) return err('Not found', 404);
+
+    if (method === 'GET') {
+      return json({ restaurant: restaurantToApi(db.restaurants[idx]) });
+    }
+
+    if (method === 'PUT') {
+      const body = await request.json();
+      const row = db.restaurants[idx];
+      if (body.name !== undefined) row.name = body.name;
+      if (body.ownerName !== undefined) row.owner_name = body.ownerName;
+      if (body.contact !== undefined) row.contact = body.contact;
+      if (body.address !== undefined) row.address = body.address;
+      if (body.domain !== undefined) row.domain = body.domain;
+      if (body.subscription !== undefined) row.subscription = body.subscription;
+      row.updated_at = nowIso();
+      return json({ restaurant: restaurantToApi(row) });
+    }
+
+    if (method === 'DELETE') {
+      db.restaurants.splice(idx, 1);
+      db.menu = db.menu.filter((m) => m.restaurant_id !== id);
+      db.rest_tables = db.rest_tables.filter((t) => t.restaurant_id !== id);
+      db.orders = db.orders.filter((o) => o.restaurant_id !== id);
+      db.chat_sessions = db.chat_sessions.filter((s) => s.restaurant_id !== id);
+      return json({ ok: true });
+    }
+  }
+
+  // ============ MENU ============
+  if (path === 'menu' && method === 'GET') {
+    const url = new URL(request.url);
+    const restaurantId = url.searchParams.get('restaurantId');
+    const availableOnly = url.searchParams.get('availableOnly');
+    let items = db.menu.filter((m) => m.restaurant_id === restaurantId);
+    if (availableOnly) items = items.filter((m) => m.available);
+    items = [...items].sort((a, b) => (
+      String(a.category).localeCompare(String(b.category)) || String(a.name).localeCompare(String(b.name))
+    ));
+    return json({ menu: items.map(menuToApi) });
+  }
+
+  if (path === 'menu' && method === 'POST') {
+    const body = await request.json();
+    const row = {
+      id: makeId('menu'),
+      restaurant_id: body.restaurantId,
+      name: body.name,
+      name_es: body.nameEs || '',
+      description: body.description || '',
+      price: parseFloat(body.price) || 0,
+      category: body.category || 'Mains',
+      image: body.image || DEMO_MENU_IMAGE,
+      available: body.available !== false,
+      created_at: nowIso(),
+    };
+    db.menu.push(row);
+    return json({ item: menuToApi(row) });
+  }
+
+  const menuMatch = path.match(/^menu\/([^\/]+)$/);
+  if (menuMatch) {
+    const id = menuMatch[1];
+    const idx = db.menu.findIndex((m) => m.id === id);
+    if (idx === -1) return err('Not found', 404);
+
+    if (method === 'PUT') {
+      const body = await request.json();
+      const row = db.menu[idx];
+      if (body.name !== undefined) row.name = body.name;
+      if (body.description !== undefined) row.description = body.description;
+      if (body.price !== undefined) row.price = parseFloat(body.price);
+      if (body.category !== undefined) row.category = body.category;
+      if (body.image !== undefined) row.image = body.image;
+      if (body.available !== undefined) row.available = body.available;
+      if (body.nameEs !== undefined) row.name_es = body.nameEs;
+      return json({ ok: true });
+    }
+
+    if (method === 'DELETE') {
+      db.menu.splice(idx, 1);
+      return json({ ok: true });
+    }
+  }
+
+  // ============ TABLES ============
+  if (path === 'tables' && method === 'GET') {
+    const url = new URL(request.url);
+    const restaurantId = url.searchParams.get('restaurantId');
+    const tables = db.rest_tables
+      .filter((t) => t.restaurant_id === restaurantId)
+      .sort((a, b) => String(a.number).localeCompare(String(b.number), undefined, { numeric: true }));
+    return json({ tables: tables.map(tableToApi) });
+  }
+
+  if (path === 'tables' && method === 'POST') {
+    const body = await request.json();
+    const row = {
+      id: makeId('table'),
+      restaurant_id: body.restaurantId,
+      number: String(body.number),
+      seats: parseInt(body.seats, 10) || 2,
+      status: 'available',
+      created_at: nowIso(),
+    };
+    db.rest_tables.push(row);
+    return json({ table: tableToApi(row) });
+  }
+
+  const tblMatch = path.match(/^tables\/([^\/]+)$/);
+  if (tblMatch) {
+    const id = tblMatch[1];
+    const idx = db.rest_tables.findIndex((t) => t.id === id);
+    if (idx === -1) return err('Not found', 404);
+
+    if (method === 'GET') {
+      return json({ table: tableToApi(db.rest_tables[idx]) });
+    }
+
+    if (method === 'PUT') {
+      const body = await request.json();
+      const row = db.rest_tables[idx];
+      if (body.number !== undefined) row.number = String(body.number);
+      if (body.seats !== undefined) row.seats = parseInt(body.seats, 10);
+      if (body.status !== undefined) row.status = body.status;
+      return json({ ok: true });
+    }
+
+    if (method === 'DELETE') {
+      db.rest_tables.splice(idx, 1);
+      return json({ ok: true });
+    }
+  }
+
+  // ============ ORDERS ============
+  if (path === 'orders' && method === 'GET') {
+    const url = new URL(request.url);
+    const restaurantId = url.searchParams.get('restaurantId');
+    const orders = db.orders
+      .filter((o) => o.restaurant_id === restaurantId)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 200);
+    return json({ orders: orders.map(orderToApi) });
+  }
+
+  if (path === 'orders' && method === 'POST') {
+    const body = await request.json();
+    const tbl = db.rest_tables.find((t) => t.id === body.tableId);
+    if (!tbl) return err('Invalid table');
+
+    const items = (body.items || []).map((i) => ({
+      id: i.id,
+      name: i.name,
+      nameEs: i.nameEs || '',
+      price: parseFloat(i.price),
+      qty: parseInt(i.qty, 10) || 1,
+      notes: i.notes || '',
+    }));
+    const total = items.reduce((sum, i) => sum + i.price * i.qty, 0);
+    const ts = nowIso();
+    const row = {
+      id: makeId('ord'),
+      restaurant_id: body.restaurantId,
+      table_id: body.tableId,
+      table_number: tbl.number,
+      items,
+      total,
+      status: 'pending',
+      allergy: body.allergy || '',
+      spicy_level: body.spicyLevel || '',
+      paid_at: null,
+      created_at: ts,
+      updated_at: ts,
+    };
+    db.orders.push(row);
+    tbl.status = 'occupied';
+    return json({ order: orderToApi(row) });
+  }
+
+  const orderMatch = path.match(/^orders\/([^\/]+)$/);
+  if (orderMatch) {
+    const id = orderMatch[1];
+    const idx = db.orders.findIndex((o) => o.id === id);
+    if (idx === -1) return err('Not found', 404);
+
+    if (method === 'GET') {
+      return json({ order: orderToApi(db.orders[idx]) });
+    }
+
+    if (method === 'PUT') {
+      const body = await request.json();
+      const row = db.orders[idx];
+      if (body.status) row.status = body.status;
+      row.updated_at = nowIso();
+      if (body.status === 'paid') {
+        const table = db.rest_tables.find((t) => t.id === row.table_id);
+        if (table) table.status = 'available';
+      }
+      return json({ ok: true });
+    }
+  }
+
+  const addonsMatch = path.match(/^orders\/([^\/]+)\/addons$/);
+  if (addonsMatch && method === 'POST') {
+    const id = addonsMatch[1];
+    const row = db.orders.find((o) => o.id === id);
+    if (!row) return err('Not found', 404);
+
+    const items = [...(row.items || [])];
+    const incoming = await request.json();
+    for (const it of (incoming.items || [])) {
+      const ex = items.find((x) => x.id === it.id);
+      if (ex) ex.qty += parseInt(it.qty, 10) || 1;
+      else {
+        items.push({
+          id: it.id,
+          name: it.name,
+          nameEs: it.nameEs || '',
+          price: parseFloat(it.price),
+          qty: parseInt(it.qty, 10) || 1,
+          notes: it.notes || '',
+        });
+      }
+    }
+    row.items = items;
+    row.total = items.reduce((sum, i) => sum + parseFloat(i.price) * i.qty, 0);
+    row.status = row.status === 'served' ? 'preparing' : row.status;
+    row.updated_at = nowIso();
+    return json({ order: orderToApi(row) });
+  }
+
+  // ============ PAYMENT (DEMO) ============
+  if (path === 'payment/demo' && method === 'POST') {
+    const { orderId } = await request.json();
+    const row = db.orders.find((o) => o.id === orderId);
+    if (!row) return err('Order not found', 404);
+    row.status = 'paid';
+    row.paid_at = nowIso();
+    row.updated_at = nowIso();
+    const table = db.rest_tables.find((t) => t.id === row.table_id);
+    if (table) table.status = 'available';
+    return json({ order: orderToApi(row) });
+  }
+
+  // ============ FEEDBACK ============
+  if (path === 'feedback' && method === 'POST') {
+    const body = await request.json();
+    db.feedback.push({
+      id: makeId('fb'),
+      restaurant_id: body.restaurantId,
+      table_id: body.tableId,
+      order_id: body.orderId,
+      rating: parseInt(body.rating, 10) || null,
+      comment: body.comment || '',
+      created_at: nowIso(),
+    });
+    return json({ ok: true });
+  }
+
+  // ============ ANALYTICS (manager) ============
+  if (path === 'analytics' && method === 'GET') {
+    const url = new URL(request.url);
+    const restaurantId = url.searchParams.get('restaurantId');
+    const orders = db.orders.filter((o) => o.restaurant_id === restaurantId && o.status !== 'cancelled');
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todays = orders.filter((o) => new Date(o.created_at) >= today);
+    const todayRevenue = todays.reduce((sum, o) => sum + parseFloat(o.total), 0);
+    const todayOrders = todays.length;
+    const avgTicket = todayOrders ? todayRevenue / todayOrders : 0;
+
+    const itemMap = {};
+    orders.forEach((o) => (o.items || []).forEach((i) => {
+      const key = i.name;
+      if (!itemMap[key]) itemMap[key] = { name: key, count: 0, revenue: 0 };
+      itemMap[key].count += i.qty;
+      itemMap[key].revenue += i.qty * parseFloat(i.price);
+    }));
+    const topItems = Object.values(itemMap).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+
+    const byHourMap = {};
+    for (let h = 0; h < 24; h++) byHourMap[h] = { hour: `${String(h).padStart(2, '0')}h`, orders: 0 };
+    todays.forEach((o) => {
+      const h = new Date(o.created_at).getHours();
+      byHourMap[h].orders += 1;
+    });
+    const byHour = Object.values(byHourMap);
+
+    const last7 = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - i);
+      const next = new Date(d);
+      next.setDate(next.getDate() + 1);
+      const revenue = orders
+        .filter((o) => new Date(o.created_at) >= d && new Date(o.created_at) < next)
+        .reduce((sum, o) => sum + parseFloat(o.total), 0);
+      last7.push({ date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), revenue: Math.round(revenue * 100) / 100 });
+    }
+
+    return json({ todayRevenue, todayOrders, avgTicket, topItems, byHour, last7 });
+  }
+
+  // ============ CENTRAL STATS ============
+  if (path === 'central/stats' && method === 'GET') {
+    const restaurants = db.restaurants;
+    const orders = db.orders.filter((o) => o.status !== 'cancelled');
+    const totalRevenue = orders.reduce((sum, o) => sum + parseFloat(o.total), 0);
+    const planPrice = { Starter: 49, Pro: 99, Premium: 199, Enterprise: 499 };
+    const mrr = restaurants.reduce((sum, r) => sum + (planPrice[r.subscription] || 0), 0);
+
+    const byPlanMap = {};
+    restaurants.forEach((r) => {
+      byPlanMap[r.subscription] = (byPlanMap[r.subscription] || 0) + 1;
+    });
+    const byPlan = Object.entries(byPlanMap).map(([name, value]) => ({ name, value }));
+
+    const trend = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - i);
+      const next = new Date(d);
+      next.setDate(next.getDate() + 1);
+      const revenue = orders
+        .filter((o) => new Date(o.created_at) >= d && new Date(o.created_at) < next)
+        .reduce((sum, o) => sum + parseFloat(o.total), 0);
+      trend.push({ date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), revenue: Math.round(revenue * 100) / 100 });
+    }
+
+    return json({ totalRestaurants: restaurants.length, totalRevenue, totalOrders: orders.length, mrr, byPlan, trend });
+  }
+
+  // ============ AI WAITER CHAT ============
+  if (path === 'chat' && method === 'POST') {
+    const body = await request.json();
+    const { sessionId, restaurantId, tableId, language = 'en', message = '', menu = [] } = body;
+    const restaurant = db.restaurants.find((r) => r.id === restaurantId);
+    const reply = buildDemoChatReply({ message, language, restaurantName: restaurant?.name, menu });
+    const actions = extractDemoChatActions(message, menu);
+
+    const idx = db.chat_sessions.findIndex((s) => s.session_id === sessionId);
+    const prev = idx >= 0 ? db.chat_sessions[idx] : { history: [] };
+    const newHistory = [...(prev.history || []), { role: 'user', content: message }, { role: 'assistant', content: reply }].slice(-30);
+    const row = { session_id: sessionId, restaurant_id: restaurantId, table_id: tableId, history: newHistory, updated_at: nowIso() };
+    if (idx >= 0) db.chat_sessions[idx] = row;
+    else db.chat_sessions.push(row);
+
+    return json({ reply, actions });
+  }
+
+  // ============ HEALTH ============
+  if (path === '' || path === 'health') {
+    return json({ status: 'ok', service: 'netrik-shop', db: 'demo-mode', time: nowIso() });
+  }
+
+  return err(`Not found: /${path}`, 404);
+}
+
 async function handler(request, { params }) {
   const path = (params?.path || []).join('/');
   const method = request.method;
   let sb;
   try { sb = getSupabase(); }
-  catch (e) { return err('Supabase not configured: ' + e.message, 500); }
+  catch (e) { sb = null; }
+
+  if (!sb) {
+    return handleDemoRequest(path, method, request);
+  }
 
   try {
     // ============ AUTH ============

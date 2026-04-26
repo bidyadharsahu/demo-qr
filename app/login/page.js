@@ -91,7 +91,7 @@ export default function LoginPage() {
                 <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm">
                   <ShieldCheck className="h-5 w-5 text-amber-300 mb-1"/>
                   <div className="font-semibold">Central Admin</div>
-                  <div className="text-xs text-white/60">Manage all restaurants. Use credentials: <span className="font-mono text-amber-200">hello / 123456</span></div>
+                  <div className="text-xs text-white/60">Manage all restaurants from one secure control center.</div>
                 </div>
               </TabsContent>
             </Tabs>
