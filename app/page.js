@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -12,37 +11,8 @@ const INTERIOR = 'https://images.pexels.com/photos/32399761/pexels-photo-3239976
 const CHEF = 'https://images.unsplash.com/photo-1759521296047-89338c8e083d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzV8MHwxfHNlYXJjaHwzfHxjaGVmJTIwc2VydmluZ3xlbnwwfHx8fDE3NzcyMDM1MDh8MA&ixlib=rb-4.1.0&q=85';
 const DISH = 'https://images.pexels.com/photos/35420084/pexels-photo-35420084.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940';
 const CAFE = 'https://images.unsplash.com/photo-1534040385115-33dcb3acba5b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njl8MHwxfHNlYXJjaHwzfHxjYWZlJTIwdGFibGV8ZW58MHx8fHwxNzc3MjAzNTE2fDA&ixlib=rb-4.1.0&q=85';
-const HERO_HEADLINE_PREFIX = 'Run your restaurant like';
-const HERO_HEADLINE_HIGHLIGHT = 'a five-star empire.';
-const HERO_HEADLINE = `${HERO_HEADLINE_PREFIX} ${HERO_HEADLINE_HIGHLIGHT}`;
 
 export default function Home() {
-  const [typedCount, setTypedCount] = useState(0);
-
-  useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setTypedCount(HERO_HEADLINE.length);
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      setTypedCount((previous) => {
-        if (previous >= HERO_HEADLINE.length) {
-          window.clearInterval(timer);
-          return previous;
-        }
-        return previous + 1;
-      });
-    }, 42);
-
-    return () => window.clearInterval(timer);
-  }, []);
-
-  const typedText = HERO_HEADLINE.slice(0, typedCount);
-  const typedPrefix = typedText.slice(0, HERO_HEADLINE_PREFIX.length);
-  const typedHighlight = typedText.slice(HERO_HEADLINE_PREFIX.length).trimStart();
-  const cursorInPrefix = typedCount <= HERO_HEADLINE_PREFIX.length;
-
   return (
     <div className="min-h-screen bg-[#0b0b0d] text-white">
       {/* Nav */}
@@ -72,22 +42,16 @@ export default function Home() {
           <img src={HERO} className="w-full h-full object-cover opacity-70" alt="hero"/>
           <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/45 to-[#0b0b0d]"/>
         </div>
-        <div className="relative container mx-auto px-6 pt-24 pb-32 text-center">
-          <h1 className="mt-8 min-h-[2.5em] text-5xl md:text-7xl font-black tracking-tight leading-[1.05] drop-shadow-2xl">
-            <span className="inline">
-              {typedPrefix}
-              {cursorInPrefix && <span className="hero-typing-cursor" aria-hidden="true"/>}
-            </span>
-            <span className="block bg-gradient-to-r from-amber-300 via-rose-400 to-amber-300 bg-clip-text text-transparent">
-              {typedHighlight}
-              {!cursorInPrefix && <span className="hero-typing-cursor" aria-hidden="true"/>}
-            </span>
+        <div className="relative container mx-auto px-6 py-16 md:py-20 text-center flex min-h-[calc(100svh-84px)] items-center justify-center">
+          <h1 className="hero-heading min-h-[2.5em] text-5xl md:text-7xl font-black tracking-tight leading-[1.05] drop-shadow-2xl">
+            <span className="hero-line">Run your restaurant like</span>
+            <span className="hero-line hero-line-delay hero-line-shine block bg-gradient-to-r from-amber-300 via-rose-400 to-amber-300 bg-clip-text text-transparent">a five-star empire.</span>
           </h1>
         </div>
       </section>
 
       {/* Features */}
-      <section id="features" className="container mx-auto px-6 py-24">
+      <section id="features" className="container mx-auto px-6 pb-24 pt-32 md:pt-36">
         <div className="text-center max-w-2xl mx-auto">
           <div className="text-amber-300 text-xs uppercase tracking-[0.3em]">Everything you need</div>
           <h2 className="mt-4 text-4xl md:text-5xl font-black">A premium toolkit for premium restaurants</h2>

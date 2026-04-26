@@ -140,30 +140,60 @@ code {
     }
 }
 
-.hero-typing-cursor {
-    display: inline-block;
-    width: 0.12em;
-    height: 0.95em;
-    margin-left: 0.08em;
-    vertical-align: -0.08em;
-    border-radius: 2px;
-    background: currentColor;
-    animation: hero-caret-blink 0.95s steps(1, end) infinite;
+.hero-heading {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.08em;
 }
 
-@keyframes hero-caret-blink {
-    0%,
-    49% {
-        opacity: 1;
-    }
-    50%,
-    100% {
+.hero-line {
+    opacity: 0;
+    transform: translateY(26px);
+    filter: blur(8px);
+    will-change: transform, opacity, filter;
+    animation: hero-line-enter 0.86s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+
+.hero-line-delay {
+    animation-delay: 0.22s;
+}
+
+.hero-line-shine {
+    background-size: 220% auto;
+    animation: hero-line-enter 0.86s cubic-bezier(0.2, 0.7, 0.2, 1) 0.22s forwards,
+        hero-gradient-shift 6.5s linear 1.2s infinite;
+}
+
+@keyframes hero-line-enter {
+    0% {
         opacity: 0;
+        transform: translateY(26px);
+        filter: blur(8px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+        filter: blur(0);
+    }
+}
+
+@keyframes hero-gradient-shift {
+    0% {
+        background-position: 0% 50%;
+    }
+    100% {
+        background-position: 100% 50%;
     }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .hero-typing-cursor {
+    .hero-line,
+    .hero-line-delay,
+    .hero-line-shine {
+        opacity: 1;
+        transform: none;
+        filter: none;
         animation: none;
     }
 }
