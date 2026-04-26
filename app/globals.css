@@ -62,7 +62,7 @@ code {
         --background: 0 0% 100%;
         --foreground: 222.2 84% 4.9%;
         --card: 0 0% 100%;
-        --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
         --popover: 0 0% 100%;
         --popover-foreground: 222.2 84% 4.9%;
         --primary: 222.2 47.4% 11.2%;
@@ -137,5 +137,33 @@ code {
     }
   body {
     @apply bg-background text-foreground;
+    }
+}
+
+.hero-typing-cursor {
+    display: inline-block;
+    width: 0.12em;
+    height: 0.95em;
+    margin-left: 0.08em;
+    vertical-align: -0.08em;
+    border-radius: 2px;
+    background: currentColor;
+    animation: hero-caret-blink 0.95s steps(1, end) infinite;
+}
+
+@keyframes hero-caret-blink {
+    0%,
+    49% {
+        opacity: 1;
+    }
+    50%,
+    100% {
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hero-typing-cursor {
+        animation: none;
     }
 }
