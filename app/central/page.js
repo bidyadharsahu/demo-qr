@@ -279,7 +279,7 @@ export default function CentralAdmin() {
                   <CartesianGrid stroke="rgba(255,255,255,0.06)"/>
                   <XAxis dataKey="date" stroke="rgba(255,255,255,0.4)" fontSize={11}/>
                   <YAxis stroke="rgba(255,255,255,0.4)" fontSize={11}/>
-                  <Tooltip contentStyle={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }} itemStyle={{ color: '#fff' }}/>
+                  <Tooltip contentStyle={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }}/>
                   <Line type="monotone" dataKey="revenue" stroke="#fbbf24" strokeWidth={2} dot={false}/>
                 </LineChart>
               </ResponsiveContainer>
@@ -293,7 +293,7 @@ export default function CentralAdmin() {
                   <Pie data={stats.byPlan || []} dataKey="value" nameKey="name" innerRadius={50} outerRadius={90} paddingAngle={3}>
                     {(stats.byPlan || []).map((_, i) => (<Cell key={i} fill={COLORS[i % COLORS.length]}/>))}
                   </Pie>
-                  <Tooltip contentStyle={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }} itemStyle={{ color: '#fff' }}/>
+                  <Tooltip contentStyle={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }}/>
                 </PieChart>
               </ResponsiveContainer>
               <div className="flex flex-wrap gap-3 text-xs mt-2">

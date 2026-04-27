@@ -272,18 +272,18 @@ export default function ManagerDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Badge variant="outline" className="border-white/20 bg-white/5 text-white/80"><Clock className="h-3 w-3 mr-1"/>{tampaDateTime}</Badge>
-            <Button size="sm" variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white relative" onClick={() => setSupportOpen(true)}>
-              <MessageSquare className="h-4 w-4 mr-1"/>Contact support
+            <div className="flex h-9 items-center rounded-md border border-white/20 bg-white/5 px-3 text-sm text-white/80 font-medium whitespace-nowrap"><Clock className="h-4 w-4 mr-2"/>{tampaDateTime}</div>
+            <Button size="sm" variant="outline" className="h-9 border-white/20 bg-white/5 hover:bg-white/10 hover:text-white text-white/80 relative" onClick={() => setSupportOpen(true)}>
+              <MessageSquare className="h-4 w-4 mr-2"/>Contact support
               {supportMessages.filter(m => m.sender === 'central' && !m.read).length > 0 && (
                 <span className="absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center rounded-full bg-rose-500 text-[8px] font-bold"></span>
               )}
             </Button>
-            <Button asChild size="sm" variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white">
-              <a href="https://wa.me/16562145190?text=Hi%20Netrik%20Support%2C%20I%20need%20help%20with%20my%20restaurant%20dashboard" target="_blank" rel="noreferrer"><MessageCircle className="h-4 w-4 mr-1"/>WhatsApp</a>
+            <Button asChild size="sm" variant="outline" className="h-9 border-white/20 bg-white/5 hover:bg-white/10 hover:text-white text-white/80">
+              <a href="https://wa.me/16562145190?text=Hi%20Netrik%20Support%2C%20I%20need%20help%20with%20my%20restaurant%20dashboard" target="_blank" rel="noreferrer"><MessageCircle className="h-4 w-4 mr-2"/>WhatsApp</a>
             </Button>
-            <Badge className="bg-green-400/20 text-green-300 border-green-400/30"><span className="h-1.5 w-1.5 rounded-full bg-green-400 mr-1.5 animate-pulse"/> Live</Badge>
-            <Button variant="ghost" className="text-white/70" onClick={() => { localStorage.removeItem('netrik_user'); router.push('/login'); }}><LogOut className="h-4 w-4 mr-2"/>Logout</Button>
+            <div className="flex h-9 items-center rounded-md border border-green-400/30 bg-green-400/10 px-3 text-sm text-green-300 font-medium whitespace-nowrap"><span className="h-1.5 w-1.5 rounded-full bg-green-400 mr-2 animate-pulse"/> Live</div>
+            <Button size="sm" variant="ghost" className="h-9 hover:bg-white/10 hover:text-white text-white/70" onClick={() => { localStorage.removeItem('netrik_user'); router.push('/login'); }}><LogOut className="h-4 w-4 mr-2"/>Logout</Button>
           </div>
         </div>
       </header>
@@ -340,14 +340,14 @@ export default function ManagerDashboard() {
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <div className="font-semibold">Revenue · last 7 days</div>
-                    <Button variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white" size="sm" onClick={() => downloadCSV(filteredOrders, 'orders-range')}><Download className="h-4 w-4 mr-2"/>CSV</Button>
+                    <Button variant="outline" className="h-9 border-white/20 bg-white/5 hover:bg-white/10 hover:text-white text-white/80" size="sm" onClick={() => downloadCSV(filteredOrders, 'orders-range')}><Download className="h-4 w-4 mr-2"/>CSV</Button>
                   </div>
                   <ResponsiveContainer width="100%" height={260}>
                     <LineChart data={analytics.last7 || []}>
                       <CartesianGrid stroke="rgba(255,255,255,0.06)"/>
                       <XAxis dataKey="date" stroke="rgba(255,255,255,0.4)" fontSize={11}/>
                       <YAxis stroke="rgba(255,255,255,0.4)" fontSize={11}/>
-                      <Tooltip contentStyle={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}/>
+                      <Tooltip contentStyle={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }}/>
                       <Line type="monotone" dataKey="revenue" stroke="#fbbf24" strokeWidth={2} dot={false}/>
                     </LineChart>
                   </ResponsiveContainer>
