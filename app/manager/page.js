@@ -69,6 +69,12 @@ export default function ManagerDashboard() {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'support_messages', filter: `restaurant_id=eq.${u.restaurantId}` }, () => {
               loadAll(u, true);
             })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'menu', filter: `restaurant_id=eq.${u.restaurantId}` }, () => {
+              loadAll(u, true);
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurants', filter: `id=eq.${u.restaurantId}` }, () => {
+              loadAll(u, true);
+            })
             .subscribe();
         }
       });
