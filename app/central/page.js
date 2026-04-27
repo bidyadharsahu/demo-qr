@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Plus, LogOut, Building2, Users, DollarSign, Activity, QrCode, Pencil, Trash2, Copy, ShieldCheck, Download, Printer, Upload } from 'lucide-react';
+import { Plus, LogOut, Building2, Users, DollarSign, Activity, QrCode, Pencil, Trash2, Copy, ShieldCheck, Download, Printer, Upload, MessageSquare, CheckCircle2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { NetrikLogo } from '@/components/netrik-logo';
 
@@ -28,6 +28,9 @@ export default function CentralAdmin() {
   const [showCredsFor, setShowCredsFor] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deletePassword, setDeletePassword] = useState('');
+  const [supportMessages, setSupportMessages] = useState([]);
+  const [replyOpen, setReplyOpen] = useState(null);
+  const [replyText, setReplyText] = useState('');
   const [form, setForm] = useState({
     name: '',
     ownerName: '',
@@ -44,19 +47,34 @@ export default function CentralAdmin() {
     if (!u || u.type !== 'central') { router.push('/login'); return; }
     setMe(u);
     refresh();
-    const id = setInterval(() => refresh(true), 4000);
-    return () => clearInterval(id);
+    
+    let channel;
+    import('@/lib/supabase').then(({ getSupabase }) => {
+      const sb = getSupabase();
+      if (sb) {
+        channel = sb.channel('central-realtime')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => refresh(true))
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurants' }, () => refresh(true))
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'support_messages' }, () => refresh(true))
+          .subscribe();
+      }
+    });
+
+    return () => { if (channel) channel.unsubscribe(); };
   }, [router]);
 
   const refresh = async (silent = false) => {
     try {
-      const [r, s] = await Promise.all([
+      const [r, s, m] = await Promise.all([
         fetch('/api/restaurants', { cache: 'no-store' }),
         fetch('/api/central/stats', { cache: 'no-store' }),
+        fetch('/api/support', { cache: 'no-store' }),
       ]);
       const d = await r.json();
       setList(d.restaurants || []);
       setStats(await s.json());
+      const msgData = await m.json();
+      setSupportMessages(msgData.messages || []);
     } catch (e) {
       if (!silent) toast.error('Failed to refresh central data');
     }
@@ -112,6 +130,19 @@ export default function CentralAdmin() {
     toast.success('Restaurant deleted');
     setDeleteTarget(null);
     setDeletePassword('');
+    refresh();
+  };
+
+  const sendSupportReply = async () => {
+    if (!replyText || !replyOpen) return;
+    const res = await fetch('/api/support', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restaurantId: replyOpen.restaurant_id || replyOpen.id, sender: 'central', message: replyText })
+    });
+    if (!res.ok) return toast.error('Failed to send reply');
+    toast.success('Reply sent');
+    setReplyText('');
     refresh();
   };
 
@@ -248,7 +279,7 @@ export default function CentralAdmin() {
                   <CartesianGrid stroke="rgba(255,255,255,0.06)"/>
                   <XAxis dataKey="date" stroke="rgba(255,255,255,0.4)" fontSize={11}/>
                   <YAxis stroke="rgba(255,255,255,0.4)" fontSize={11}/>
-                  <Tooltip contentStyle={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}/>
+                  <Tooltip contentStyle={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }} itemStyle={{ color: '#fff' }}/>
                   <Line type="monotone" dataKey="revenue" stroke="#fbbf24" strokeWidth={2} dot={false}/>
                 </LineChart>
               </ResponsiveContainer>
@@ -262,7 +293,7 @@ export default function CentralAdmin() {
                   <Pie data={stats.byPlan || []} dataKey="value" nameKey="name" innerRadius={50} outerRadius={90} paddingAngle={3}>
                     {(stats.byPlan || []).map((_, i) => (<Cell key={i} fill={COLORS[i % COLORS.length]}/>))}
                   </Pie>
-                  <Tooltip contentStyle={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}/>
+                  <Tooltip contentStyle={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }} itemStyle={{ color: '#fff' }}/>
                 </PieChart>
               </ResponsiveContainer>
               <div className="flex flex-wrap gap-3 text-xs mt-2">
@@ -429,6 +460,55 @@ export default function CentralAdmin() {
           </DialogContent>
         </Dialog>
       </main>
+
+      {/* Support Inbox Floating Widget */}
+      <Dialog>
+        <DialogTrigger asChild>
+          <Button className="fixed bottom-6 right-6 rounded-full h-14 w-14 bg-[#635BFF] hover:bg-[#524be0] text-white shadow-xl shadow-[#635BFF]/30">
+            <MessageSquare className="h-6 w-6"/>
+            {supportMessages.filter(m => m.sender === 'restaurant' && !m.read).length > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold">
+                {supportMessages.filter(m => m.sender === 'restaurant' && !m.read).length}
+              </span>
+            )}
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="bg-[#111] border-white/10 text-white max-w-2xl h-[600px] flex flex-col p-0">
+          <DialogHeader className="p-4 border-b border-white/10 shrink-0"><DialogTitle>Support Inbox</DialogTitle></DialogHeader>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {supportMessages.length === 0 && <div className="text-center text-white/40 mt-10">No support messages yet.</div>}
+            {supportMessages.map(m => {
+              const r = list.find(x => x.id === m.restaurant_id);
+              return (
+                <div key={m.id} className={`flex flex-col ${m.sender === 'central' ? 'items-end' : 'items-start'}`}>
+                  {m.sender === 'restaurant' && <div className="text-xs text-white/40 mb-1 ml-1">{r?.name || 'Unknown Restaurant'}</div>}
+                  <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${m.sender === 'central' ? 'bg-[#635BFF] text-white rounded-br-sm' : 'bg-white/10 text-white rounded-bl-sm'}`}>
+                    {m.message}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[10px] text-white/30">{new Date(m.created_at).toLocaleString()}</span>
+                    {m.sender === 'restaurant' && (
+                      <button onClick={() => setReplyOpen(r)} className="text-[10px] text-amber-400 hover:underline">Reply</button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {replyOpen && (
+            <div className="p-4 border-t border-white/10 shrink-0 bg-black/50">
+              <div className="text-xs text-amber-300 mb-2 flex justify-between items-center">
+                <span>Replying to {replyOpen.name}</span>
+                <button onClick={() => setReplyOpen(null)} className="text-white/50 hover:text-white">Cancel</button>
+              </div>
+              <div className="flex gap-2">
+                <Input value={replyText} onChange={e=>setReplyText(e.target.value)} placeholder="Type a reply..." className="bg-white/5 border-white/10" onKeyDown={e => e.key === 'Enter' && sendSupportReply()}/>
+                <Button onClick={sendSupportReply} className="bg-amber-400 text-black hover:bg-amber-300">Send</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

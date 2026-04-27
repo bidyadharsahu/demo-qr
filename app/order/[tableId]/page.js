@@ -197,7 +197,8 @@ export default function CustomerOrder() {
   if (!restaurant || !table) return <div className="min-h-screen bg-[#0b0b0d] text-white flex items-center justify-center font-sans">Connecting to your table...</div>;
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-[#0b0b0d] text-white font-sans max-w-lg mx-auto shadow-2xl relative overflow-hidden">
+    <div className="fixed inset-0 bg-black flex justify-center overflow-hidden overscroll-none">
+      <div className="flex flex-col w-full h-full max-w-lg bg-[#0b0b0d] text-white font-sans shadow-2xl relative overflow-hidden">
       
       {/* Sleek App Header */}
       <div className="flex-none pt-safe bg-gradient-to-b from-black/80 to-transparent backdrop-blur-md z-20 pb-4">
@@ -336,6 +337,7 @@ export default function CustomerOrder() {
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
         .pt-safe { padding-top: env(safe-area-inset-top); }
       `}</style>
+      </div>
     </div>
   );
 }

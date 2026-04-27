@@ -11,9 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { LogOut, BarChart3, ClipboardList, UtensilsCrossed, Table2, ChefHat, Plus, Trash2, Pencil, Printer, QrCode, DollarSign, TrendingUp, Download, Clock, CheckCircle2, Mail, MessageCircle } from 'lucide-react';
+import { LogOut, BarChart3, ClipboardList, UtensilsCrossed, Table2, ChefHat, Plus, Trash2, Pencil, Printer, QrCode, DollarSign, TrendingUp, Download, Clock, CheckCircle2, Mail, MessageCircle, MessageSquare } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { NetrikLogo } from '@/components/netrik-logo';
 
@@ -42,6 +41,11 @@ export default function ManagerDashboard() {
   const [tableOpen, setTableOpen] = useState(false);
   const [tableForm, setTableForm] = useState({ number: '', seats: 2 });
   const [tableQr, setTableQr] = useState(null);
+  
+  // Support
+  const [supportOpen, setSupportOpen] = useState(false);
+  const [supportMessages, setSupportMessages] = useState([]);
+  const [supportText, setSupportText] = useState('');
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('netrik_user') || 'null');
@@ -61,6 +65,9 @@ export default function ManagerDashboard() {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'rest_tables', filter: `restaurant_id=eq.${u.restaurantId}` }, () => {
               loadAll(u, true);
             })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'support_messages', filter: `restaurant_id=eq.${u.restaurantId}` }, () => {
+              loadAll(u, true);
+            })
             .subscribe();
         }
       });
@@ -74,14 +81,16 @@ export default function ManagerDashboard() {
 
   const loadAll = async (u, silent = false) => {
     if (!u) return;
-    const [r, m, t, o, a] = await Promise.all([
+    const [r, m, t, o, a, sm] = await Promise.all([
       fetch(`/api/restaurants/${u.restaurantId}`, { cache: 'no-store' }).then(r => r.json()),
       fetch(`/api/menu?restaurantId=${u.restaurantId}`, { cache: 'no-store' }).then(r => r.json()),
       fetch(`/api/tables?restaurantId=${u.restaurantId}`, { cache: 'no-store' }).then(r => r.json()),
       fetch(`/api/orders?restaurantId=${u.restaurantId}`, { cache: 'no-store' }).then(r => r.json()),
       fetch(`/api/analytics?restaurantId=${u.restaurantId}`, { cache: 'no-store' }).then(r => r.json()),
+      fetch(`/api/support?restaurantId=${u.restaurantId}`, { cache: 'no-store' }).then(r => r.json()),
     ]);
     setRestaurant(r.restaurant); setMenu(m.menu || []); setTables(t.tables || []); setOrders(o.orders || []); setAnalytics(a || {});
+    setSupportMessages(sm.messages || []);
   };
 
   const saveItem = async () => {
@@ -130,6 +139,17 @@ export default function ManagerDashboard() {
 
   const setOrderStatus = async (o, status) => {
     await fetch(`/api/orders/${o.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
+    loadAll(me);
+  };
+
+  const sendSupportMsg = async () => {
+    if (!supportText) return;
+    const res = await fetch('/api/support', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restaurantId: me.restaurantId, sender: 'restaurant', message: supportText })
+    });
+    if (!res.ok) return toast.error('Failed to send');
+    setSupportText('');
     loadAll(me);
   };
 
@@ -253,8 +273,11 @@ export default function ManagerDashboard() {
           </div>
           <div className="flex items-center gap-3">
             <Badge variant="outline" className="border-white/20 bg-white/5 text-white/80"><Clock className="h-3 w-3 mr-1"/>{tampaDateTime}</Badge>
-            <Button asChild size="sm" variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white">
-              <a href="mailto:namasterides26@gmail.com?subject=Netrik%20Support%20Request"><Mail className="h-4 w-4 mr-1"/>Contact support</a>
+            <Button size="sm" variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white relative" onClick={() => setSupportOpen(true)}>
+              <MessageSquare className="h-4 w-4 mr-1"/>Contact support
+              {supportMessages.filter(m => m.sender === 'central' && !m.read).length > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center rounded-full bg-rose-500 text-[8px] font-bold"></span>
+              )}
             </Button>
             <Button asChild size="sm" variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white">
               <a href="https://wa.me/16562145190?text=Hi%20Netrik%20Support%2C%20I%20need%20help%20with%20my%20restaurant%20dashboard" target="_blank" rel="noreferrer"><MessageCircle className="h-4 w-4 mr-1"/>WhatsApp</a>
@@ -585,6 +608,31 @@ export default function ManagerDashboard() {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* Support Contact Dialog */}
+      <Dialog open={supportOpen} onOpenChange={setSupportOpen}>
+        <DialogContent className="bg-[#111] border-white/10 text-white max-w-lg h-[500px] flex flex-col p-0">
+          <DialogHeader className="p-4 border-b border-white/10 shrink-0"><DialogTitle>Contact Netrik Support</DialogTitle></DialogHeader>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="text-center text-xs text-white/40">This chat connects you directly with Central Admin.</div>
+            {supportMessages.map(m => (
+              <div key={m.id} className={`flex flex-col ${m.sender === 'central' ? 'items-start' : 'items-end'}`}>
+                {m.sender === 'central' && <div className="text-xs text-amber-300/80 mb-1 ml-1">Netrik Shop HQ</div>}
+                <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${m.sender === 'restaurant' ? 'bg-[#635BFF] text-white rounded-br-sm' : 'bg-white/10 text-white rounded-bl-sm'}`}>
+                  {m.message}
+                </div>
+                <div className="text-[10px] text-white/30 mt-1">{new Date(m.created_at).toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
+          <div className="p-4 border-t border-white/10 shrink-0 bg-black/50">
+            <div className="flex gap-2">
+              <Input value={supportText} onChange={e=>setSupportText(e.target.value)} placeholder="Type your message..." className="bg-white/5 border-white/10" onKeyDown={e => e.key === 'Enter' && sendSupportMsg()}/>
+              <Button onClick={sendSupportMsg} className="bg-amber-400 text-black hover:bg-amber-300">Send</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

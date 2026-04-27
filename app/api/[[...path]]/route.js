@@ -544,6 +544,28 @@ async function handleDemoRequest(path, method, request) {
     return json({ ok: true });
   }
 
+  // ============ SUPPORT MESSAGES ============
+  if (!db.support_messages) db.support_messages = [];
+  if (path === 'support' && method === 'GET') {
+    const url = new URL(request.url);
+    const restaurantId = url.searchParams.get('restaurantId');
+    const msgs = restaurantId ? db.support_messages.filter(m => m.restaurant_id === restaurantId) : db.support_messages;
+    return json({ messages: msgs.sort((a,b)=> new Date(a.created_at) - new Date(b.created_at)) });
+  }
+  if (path === 'support' && method === 'POST') {
+    const body = await request.json();
+    const msg = {
+      id: makeId('msg'),
+      restaurant_id: body.restaurantId,
+      sender: body.sender || 'restaurant',
+      message: body.message,
+      read: false,
+      created_at: nowIso()
+    };
+    db.support_messages.push(msg);
+    return json({ message: msg });
+  }
+
   // ============ ANALYTICS (manager) ============
   if (path === 'analytics' && method === 'GET') {
     const url = new URL(request.url);
@@ -939,6 +961,28 @@ async function handler(request, { params }) {
       const { error } = await sb.from('feedback').insert(row);
       if (error) return err(error.message, 500);
       return json({ ok: true });
+    }
+
+    // ============ SUPPORT MESSAGES ============
+    if (path === 'support' && method === 'GET') {
+      const url = new URL(request.url);
+      const restaurantId = url.searchParams.get('restaurantId');
+      let query = sb.from('support_messages').select('*').order('created_at', { ascending: true });
+      if (restaurantId) query = query.eq('restaurant_id', restaurantId);
+      const { data, error } = await query;
+      if (error) return err(error.message, 500);
+      return json({ messages: data || [] });
+    }
+    if (path === 'support' && method === 'POST') {
+      const body = await request.json();
+      const row = {
+        restaurant_id: body.restaurantId,
+        sender: body.sender || 'restaurant',
+        message: body.message,
+      };
+      const { data, error } = await sb.from('support_messages').insert(row).select('*').single();
+      if (error) return err(error.message, 500);
+      return json({ message: data });
     }
 
     // ============ ANALYTICS (manager) ============
