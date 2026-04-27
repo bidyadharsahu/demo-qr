@@ -1026,14 +1026,14 @@ ORDER STAGE: ${stage}
       ];
       let raw;
       try {
-        raw = await llmChat({ messages, model: 'gemini/gemini-2.5-flash', temperature: 0.8 });
+        raw = await llmChat({ messages, model: 'gemini-2.5-flash', temperature: 0.8 });
       } catch (e) {
         console.error('LLM err', e);
         return json({ reply: language === 'es' ? 'Disculpe, tuve un problema. ¿Podría repetir?' : 'Sorry, I had a hiccup. Could you repeat that?', actions: null });
       }
       const { reply, actions } = stripJson(raw);
       const newHistory = [...history, { role: 'user', content: message }, { role: 'assistant', content: raw }].slice(-30);
-      await sb.from('chat_sessions').upsert({ session_id: sessionId, restaurant_id: restaurantId, table_id: tableId, history: newHistory, updated_at: new Date().toISOString() });
+      await sb.from('chat_sessions').upsert({ session_id: sessionId, restaurant_id: restaurantId, table_id: tableId, history: newHistory, updated_at: new Date().toISOString() }, { onConflict: 'session_id' });
       return json({ reply: reply || raw, actions });
     }
 

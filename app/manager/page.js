@@ -48,11 +48,27 @@ export default function ManagerDashboard() {
     if (!u || u.type !== 'manager') { router.push('/login'); return; }
     setMe(u);
     loadAll(u);
-    const refreshId = setInterval(() => loadAll(u, true), 3000);
     const clockId = setInterval(() => setClock(new Date()), 1000);
+    let channel;
+    if (u) {
+      import('@/lib/supabase').then(({ getSupabase }) => {
+        const sb = getSupabase();
+        if (sb) {
+          channel = sb.channel('manager-realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${u.restaurantId}` }, () => {
+              loadAll(u, true);
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'rest_tables', filter: `restaurant_id=eq.${u.restaurantId}` }, () => {
+              loadAll(u, true);
+            })
+            .subscribe();
+        }
+      });
+    }
+
     return () => {
-      clearInterval(refreshId);
       clearInterval(clockId);
+      if (channel) channel.unsubscribe();
     };
   }, [router]);
 

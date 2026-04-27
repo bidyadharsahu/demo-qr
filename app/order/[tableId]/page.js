@@ -5,14 +5,8 @@ import { useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Send, ShoppingCart, Plus, Minus, CreditCard, Star, Sparkles, Receipt, UtensilsCrossed } from 'lucide-react';
-
-const FOOD_FALLBACK = 'https://images.pexels.com/photos/35420084/pexels-photo-35420084.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940';
+import { Send, CreditCard, Star, Receipt, Utensils, ChefHat } from 'lucide-react';
 
 export default function CustomerOrder() {
   const { tableId } = useParams();
@@ -22,28 +16,35 @@ export default function CustomerOrder() {
   const [cart, setCart] = useState([]); // {id,name,nameEs,price,qty,notes}
   const [allergy, setAllergy] = useState('');
   const [spicy, setSpicy] = useState('');
-  const [language, setLanguage] = useState('en');
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [sessionId] = useState(() => 'sess_' + Math.random().toString(36).slice(2));
-  const [order, setOrder] = useState(null); // current placed order
-  const [stage, setStage] = useState('browsing'); // browsing | ordered | served | paid | feedback | done
+  const [order, setOrder] = useState(null);
+  const [stage, setStage] = useState('browsing'); // browsing | ordered | served | paying | feedback | done
   const [rating, setRating] = useState(5);
   const [feedback, setFeedback] = useState('');
   const chatEndRef = useRef(null);
+  const [paymentSimulating, setPaymentSimulating] = useState(false);
 
   useEffect(() => {
     if (!tableId) return;
     (async () => {
-      const r = await fetch(`/api/tables/${tableId}`, { cache: 'no-store' }).then(r => r.json());
-      if (!r.table) { toast.error('Table not found'); return; }
-      setTable(r.table);
-      const rest = await fetch(`/api/restaurants/${r.table.restaurantId}`, { cache: 'no-store' }).then(r => r.json());
-      setRestaurant(rest.restaurant);
-      const m = await fetch(`/api/menu?restaurantId=${r.table.restaurantId}&availableOnly=1`, { cache: 'no-store' }).then(r => r.json());
-      setMenu(m.menu || []);
-      setMessages([{ role: 'assistant', text: `Welcome to ${rest.restaurant?.name}! Tell me what you are craving and I can add items, place your order, and help with online payment.` }]);
+      try {
+        const r = await fetch(`/api/tables/${tableId}`, { cache: 'no-store' }).then(r => r.json());
+        if (!r.table) { toast.error('Table not found'); return; }
+        setTable(r.table);
+        const rest = await fetch(`/api/restaurants/${r.table.restaurantId}`, { cache: 'no-store' }).then(r => r.json());
+        setRestaurant(rest.restaurant);
+        const m = await fetch(`/api/menu?restaurantId=${r.table.restaurantId}&availableOnly=1`, { cache: 'no-store' }).then(r => r.json());
+        setMenu(m.menu || []);
+        
+        setMessages([
+          { role: 'assistant', text: `Hi there! 👋 Welcome to ${rest.restaurant?.name || 'our restaurant'}. I'm your digital waiter. What are you craving today? You can ask for recommendations, add items, place your order, and pay online directly in this chat.` }
+        ]);
+      } catch (e) {
+        console.error(e);
+      }
     })();
   }, [tableId]);
 
@@ -58,23 +59,12 @@ export default function CustomerOrder() {
         setOrder(r.order);
         if (r.order.status === 'ready' && stage === 'ordered') {
           setStage('served');
-          setMessages(m => [...m, { role: 'assistant', text: `✨ Your food is ready! Please enjoy. When you're done, hit Pay below.` }]);
+          setMessages(m => [...m, { role: 'assistant', text: `✨ Good news! Your food is ready. Please enjoy your meal.` }]);
         }
       }
     }, 4000);
     return () => clearInterval(id);
   }, [order, stage]);
-
-  const addToCart = (item, quantity = 1, notify = true) => {
-    setCart((current) => {
-      const ex = current.find((x) => x.id === item.id);
-      if (ex) {
-        return current.map((x) => x.id === item.id ? { ...x, qty: x.qty + quantity } : x);
-      }
-      return [...current, { id: item.id, name: item.name, nameEs: item.nameEs || '', price: item.price, qty: quantity, notes: '' }];
-    });
-    if (notify) toast.success(`${item.name} added`);
-  };
 
   const mergeItemsIntoCart = (baseCart, additions = []) => {
     const next = [...baseCart.map((x) => ({ ...x }))];
@@ -89,10 +79,6 @@ export default function CustomerOrder() {
     return next;
   };
 
-  const inc = (id) => setCart(c => c.map(x => x.id === id ? { ...x, qty: x.qty + 1 } : x));
-  const dec = (id) => setCart(c => c.flatMap(x => x.id === id ? (x.qty > 1 ? [{ ...x, qty: x.qty - 1 }] : []) : [x]));
-  const total = cart.reduce((s, x) => s + x.price * x.qty, 0);
-
   const placeOrder = async (itemsOverride = null) => {
     const items = itemsOverride || cart;
     if (items.length === 0) return toast.error('Cart is empty');
@@ -105,8 +91,7 @@ export default function CustomerOrder() {
     setOrder(data.order);
     setStage('ordered');
     setCart([]);
-    toast.success('Order placed!');
-    setMessages(m => [...m, { role: 'assistant', text: `✅ Order placed! Ticket #${data.order.id.slice(0,6).toUpperCase()}. The kitchen is preparing your food now.` }]);
+    setMessages(m => [...m, { role: 'assistant', text: `✅ Awesome! I've placed your order with the kitchen (Ticket #${data.order.id.slice(0,6).toUpperCase()}). They are preparing your food now.` }]);
   };
 
   const addOnsAfterOrder = async (itemsOverride = null) => {
@@ -120,11 +105,20 @@ export default function CustomerOrder() {
     if (!res.ok) return toast.error(data.error || 'Failed');
     setOrder(data.order);
     setCart([]);
-    toast.success('Added to your existing order');
-    setMessages(m => [...m, { role: 'assistant', text: `Added to your tab. New total: $${data.order.total.toFixed(2)}.` }]);
+    setMessages(m => [...m, { role: 'assistant', text: `Done! I've added those to your existing tab. Your new total is $${data.order.total.toFixed(2)}.` }]);
   };
 
-  const payNow = async () => {
+  const triggerPaymentFlow = () => {
+    setStage('paying');
+    setMessages(m => [...m, { role: 'assistant', text: `Redirecting to secure online payment for $${order.total.toFixed(2)}...` }]);
+    // Simulate Stripe redirect
+    setTimeout(() => {
+      setPaymentSimulating(true);
+    }, 1500);
+  };
+
+  const completeSimulatedPayment = async () => {
+    setPaymentSimulating(false);
     if (!order) return;
     const res = await fetch('/api/payment/demo', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -134,8 +128,7 @@ export default function CustomerOrder() {
     if (!res.ok) return toast.error(data.error || 'Payment failed');
     setOrder(data.order);
     setStage('feedback');
-    toast.success('Payment successful!');
-    setMessages(m => [...m, { role: 'assistant', text: `💳 Payment received — thank you! Could you spare a moment to rate your experience?` }]);
+    setMessages(m => [...m, { role: 'assistant', text: `💳 Payment successful! Thank you so much. Could you spare a moment to rate your experience?` }]);
   };
 
   const submitFeedback = async () => {
@@ -144,20 +137,20 @@ export default function CustomerOrder() {
       body: JSON.stringify({ restaurantId: restaurant.id, tableId: table.id, orderId: order.id, rating, comment: feedback }),
     });
     setStage('done');
-    setMessages(m => [...m, { role: 'assistant', text: `Thank you! 🙏 Hope to see you again at ${restaurant.name}.` }]);
+    setMessages(m => [...m, { role: 'assistant', text: `Thank you for your feedback! 🙏 Have a wonderful day, and we hope to see you again soon.` }]);
   };
 
-  const sendMessage = async () => {
-    const text = input.trim();
+  const sendMessage = async (textOverride = null) => {
+    const text = textOverride || input.trim();
     if (!text || sending) return;
     setMessages(m => [...m, { role: 'user', text }]);
-    setInput('');
+    if (!textOverride) setInput('');
     setSending(true);
     try {
       const res = await fetch('/api/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sessionId, restaurantId: restaurant.id, tableId: table.id, language,
+          sessionId, restaurantId: restaurant.id, tableId: table.id, language: 'en',
           message: text,
           menu: menu.map(m => ({ id: m.id, name: m.name, description: m.description, price: m.price, category: m.category })),
           cart,
@@ -166,199 +159,184 @@ export default function CustomerOrder() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Chat failed');
-      setMessages(m => [...m, { role: 'assistant', text: data.reply }]);
-
+      
       let nextCart = cart;
       if (data.actions?.add_items?.length) {
         nextCart = mergeItemsIntoCart(cart, data.actions.add_items);
         setCart(nextCart);
-        toast.success('Items added from chat');
       }
 
       if (data.actions?.set_allergy) setAllergy(data.actions.set_allergy);
       if (data.actions?.set_spicy) setSpicy(data.actions.set_spicy);
 
+      // The AI might reply and place the order in the same turn
       if (data.actions?.place_order) {
         if (stage === 'browsing') await placeOrder(nextCart);
         else if (stage === 'ordered' || stage === 'served') await addOnsAfterOrder(nextCart);
+      } else {
+        // Just standard reply
+        setMessages(m => [...m, { role: 'assistant', text: data.reply }]);
+        
+        // Show cart summary if items were added but not placed
+        if (data.actions?.add_items?.length && stage === 'browsing') {
+          const total = nextCart.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);
+          setMessages(m => [...m, { role: 'assistant', text: `Your cart is currently at $${total.toFixed(2)}. Say "place order" when you are ready!` }]);
+        }
       }
 
       if (data.actions?.pay_now && order && order.status !== 'paid') {
-        await payNow();
+        triggerPaymentFlow();
       }
     } catch (e) {
-      setMessages(m => [...m, { role: 'assistant', text: 'Sorry, I had a hiccup. Could you say that again?' }]);
+      setMessages(m => [...m, { role: 'assistant', text: 'Sorry, I lost connection for a moment. Could you say that again?' }]);
     } finally {
       setSending(false);
     }
   };
 
-  if (!restaurant || !table) return <div className="min-h-screen grid place-items-center bg-[#0b0b0d] text-white">Loading…</div>;
+  if (!restaurant || !table) return <div className="min-h-screen bg-[#0b0b0d] text-white flex items-center justify-center font-sans">Connecting to your table...</div>;
 
   return (
-    <div className="min-h-screen bg-[#0b0b0d] text-white pb-32">
-      <header className="sticky top-0 z-30 backdrop-blur bg-black/60 border-b border-white/10">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          <div>
-            <div className="font-bold">{restaurant.name}</div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-amber-300/80">by Netrik Shop · Table {table.number}</div>
+    <div className="flex flex-col h-[100dvh] bg-[#0b0b0d] text-white font-sans max-w-lg mx-auto shadow-2xl relative overflow-hidden">
+      
+      {/* Sleek App Header */}
+      <div className="flex-none pt-safe bg-gradient-to-b from-black/80 to-transparent backdrop-blur-md z-20 pb-4">
+        <div className="px-5 pt-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {restaurant.logoUrl ? (
+              <img src={restaurant.logoUrl} alt="Logo" className="w-10 h-10 rounded-full border border-white/20 object-cover shadow-lg" />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-400 to-rose-500 grid place-items-center shadow-lg"><ChefHat className="text-black w-5 h-5"/></div>
+            )}
+            <div>
+              <h1 className="font-bold text-lg leading-tight tracking-tight shadow-black/50">{restaurant.name}</h1>
+              <p className="text-[11px] text-white/60 font-medium uppercase tracking-widest">Table {table.number}</p>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Select value={language} onValueChange={setLanguage}>
-              <SelectTrigger className="w-24 h-8 bg-white/5 border-white/10 text-xs"><SelectValue/></SelectTrigger>
-              <SelectContent className="bg-[#111] text-white border-white/10">
-                <SelectItem value="en">EN</SelectItem>
-                <SelectItem value="es">ES</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button size="sm" variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white"><UtensilsCrossed className="h-4 w-4 mr-1"/>Menu</Button>
-              </SheetTrigger>
-              <SheetContent className="bg-[#111] border-white/10 text-white w-full sm:max-w-lg overflow-y-auto">
-                <SheetHeader><SheetTitle className="text-white">Menu quick picks</SheetTitle></SheetHeader>
-                <div className="mt-4 grid gap-3">
-                  {menu.map((item) => (
-                    <Card key={item.id} className="bg-white/5 border-white/10 overflow-hidden">
-                      <div className="h-32 overflow-hidden"><img src={item.image || FOOD_FALLBACK} className="w-full h-full object-cover"/></div>
-                      <CardContent className="p-3">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <div className="font-semibold">{item.name}</div>
-                            <div className="text-xs text-white/50">{item.category}</div>
-                          </div>
-                          <div className="font-semibold text-amber-300">${item.price.toFixed(2)}</div>
-                        </div>
-                        {item.description && <div className="text-xs text-white/60 mt-2 line-clamp-2">{item.description}</div>}
-                        <Button size="sm" className="mt-3 w-full bg-amber-400 text-black hover:bg-amber-300" onClick={() => addToCart(item)}><Plus className="h-4 w-4 mr-1"/>Add</Button>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </SheetContent>
-            </Sheet>
-
-            <Sheet>
-              <SheetTrigger asChild><Button size="sm" variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white relative"><ShoppingCart className="h-4 w-4 mr-1"/>Cart{cart.length > 0 && <Badge className="ml-2 bg-amber-400 text-black">{cart.reduce((s,x)=>s+x.qty,0)}</Badge>}</Button></SheetTrigger>
-              <SheetContent className="bg-[#111] border-white/10 text-white w-full sm:max-w-md overflow-y-auto">
-                <SheetHeader><SheetTitle className="text-white">{stage === 'ordered' ? 'Add-ons' : 'Your order'}</SheetTitle></SheetHeader>
-                <div className="mt-4 space-y-2">
-                  {cart.length === 0 && <div className="text-white/40 text-sm">Cart is empty.</div>}
-                  {cart.map(it => (
-                    <div key={it.id} className="flex items-center justify-between rounded-lg bg-white/5 p-3">
-                      <div className="flex-1"><div className="font-medium">{it.name}</div><div className="text-xs text-white/50">${it.price.toFixed(2)} each</div></div>
-                      <div className="flex items-center gap-2">
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={()=>dec(it.id)}><Minus className="h-3 w-3"/></Button>
-                        <span className="w-6 text-center">{it.qty}</span>
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={()=>inc(it.id)}><Plus className="h-3 w-3"/></Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 space-y-2">
-                  <Input placeholder="Allergies (e.g. nuts, dairy)" value={allergy} onChange={e=>setAllergy(e.target.value)} className="bg-white/5 border-white/10"/>
-                  <Select value={spicy} onValueChange={setSpicy}>
-                    <SelectTrigger className="bg-white/5 border-white/10"><SelectValue placeholder="Spice level (optional)"/></SelectTrigger>
-                    <SelectContent className="bg-[#111] text-white border-white/10">
-                      <SelectItem value="mild">Mild / Suave</SelectItem>
-                      <SelectItem value="medium">Medium / Medio</SelectItem>
-                      <SelectItem value="hot">Hot / Picante</SelectItem>
-                      <SelectItem value="extra-hot">Extra Hot / Extra Picante</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="mt-4 border-t border-white/10 pt-4 flex items-center justify-between">
-                  <div className="text-white/60 text-sm">Subtotal</div>
-                  <div className="text-2xl font-black text-amber-300">${total.toFixed(2)}</div>
-                </div>
-                {stage === 'browsing' ? (
-                  <Button disabled={cart.length === 0} onClick={() => placeOrder()} className="mt-3 w-full bg-amber-400 text-black hover:bg-amber-300 h-11">Place order</Button>
-                ) : stage === 'ordered' || stage === 'served' ? (
-                  <Button disabled={cart.length === 0} onClick={() => addOnsAfterOrder()} className="mt-3 w-full bg-amber-400 text-black hover:bg-amber-300 h-11"><Plus className="h-4 w-4 mr-2"/>Add to my tab</Button>
-                ) : null}
-              </SheetContent>
-            </Sheet>
-          </div>
+          {order && (
+            <div className="text-right">
+               <div className="text-xl font-black text-amber-400">${order.total.toFixed(2)}</div>
+               <div className="text-[10px] text-white/50 uppercase tracking-widest">{order.status}</div>
+            </div>
+          )}
         </div>
-      </header>
+      </div>
 
-      {/* Order status banner */}
-      {order && (
-        <div className="container mx-auto px-4 mt-4">
-          <Card className="bg-gradient-to-r from-amber-400/10 to-rose-400/10 border-amber-400/30">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div>
-                <div className="text-xs text-amber-300">Ticket #{order.id.slice(0,6).toUpperCase()}</div>
-                <div className="font-semibold">Status: <span className="capitalize">{order.status}</span></div>
-                <div className="text-xs text-white/60">Total: ${order.total.toFixed(2)}</div>
+      {/* Chat Messages Area */}
+      <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-4 pt-2 hide-scrollbar scroll-smooth">
+        {messages.map((m, i) => (
+          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
+            {m.role === 'assistant' && (
+              <div className="w-6 h-6 rounded-full bg-white/10 shrink-0 mr-2 mt-auto mb-1 flex items-center justify-center">
+                <ChefHat className="w-3.5 h-3.5 text-white/60" />
               </div>
-              {stage === 'served' && order.status !== 'paid' && (<Button onClick={payNow} className="bg-green-500 hover:bg-green-400 text-white"><CreditCard className="h-4 w-4 mr-2"/>Pay ${order.total.toFixed(2)}</Button>)}
-              {stage === 'ordered' && order.status === 'preparing' && <Badge className="bg-blue-400/20 text-blue-300 border-blue-400/30">Cooking…</Badge>}
-            </CardContent>
-          </Card>
+            )}
+            <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-[15px] leading-relaxed shadow-sm ${m.role === 'user' ? 'bg-gradient-to-br from-amber-400 to-amber-500 text-black rounded-br-sm font-medium' : 'bg-[#1c1c1e] text-white/90 rounded-bl-sm border border-white/5'}`}>
+              {m.text}
+            </div>
+          </div>
+        ))}
+        {sending && (
+          <div className="flex justify-start animate-in fade-in">
+             <div className="w-6 h-6 rounded-full bg-white/10 shrink-0 mr-2 mt-auto mb-1 flex items-center justify-center">
+                <ChefHat className="w-3.5 h-3.5 text-white/60" />
+              </div>
+            <div className="bg-[#1c1c1e] text-white/50 rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1 items-center border border-white/5">
+              <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce"></span>
+              <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce delay-75"></span>
+              <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce delay-150"></span>
+            </div>
+          </div>
+        )}
+        <div ref={chatEndRef} className="h-2" />
+      </div>
+
+      {/* Quick Action Chips */}
+      {stage === 'browsing' && !sending && cart.length === 0 && (
+         <div className="px-4 pb-3 flex gap-2 overflow-x-auto hide-scrollbar whitespace-nowrap animate-in slide-in-from-bottom-4">
+           <button onClick={() => sendMessage("What are your popular dishes?")} className="px-4 py-2 rounded-full bg-white/10 border border-white/10 text-sm font-medium hover:bg-white/20 transition-colors">✨ Recommendations</button>
+           <button onClick={() => sendMessage("Show me the menu")} className="px-4 py-2 rounded-full bg-white/10 border border-white/10 text-sm font-medium hover:bg-white/20 transition-colors"><Utensils className="w-3 h-3 inline mr-1.5"/> Menu</button>
+         </div>
+      )}
+
+      {/* Input Area */}
+      <div className="flex-none p-4 bg-[#0b0b0d] border-t border-white/10 pb-safe z-20">
+        <div className="relative flex items-center">
+          <Input 
+            value={input} 
+            onChange={e => setInput(e.target.value)} 
+            onKeyDown={e => e.key === 'Enter' && sendMessage()} 
+            placeholder="Type your order or question..." 
+            className="w-full bg-[#1c1c1e] border-white/10 text-[15px] h-12 rounded-full pl-5 pr-12 focus-visible:ring-amber-400 focus-visible:border-amber-400 transition-all placeholder:text-white/30" 
+            disabled={sending || stage === 'paying' || stage === 'feedback' || stage === 'done'}
+          />
+          <button 
+            onClick={() => sendMessage()} 
+            disabled={sending || !input.trim() || stage === 'paying' || stage === 'feedback' || stage === 'done'} 
+            className="absolute right-1.5 w-9 h-9 flex items-center justify-center rounded-full bg-amber-400 text-black disabled:opacity-50 disabled:bg-white/10 disabled:text-white/30 transition-colors"
+          >
+            <Send className="h-4 w-4 ml-0.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Stripe Payment Simulation Modal */}
+      {paymentSimulating && (
+        <div className="absolute inset-0 z-50 bg-[#0b0b0d] flex items-center justify-center p-6 animate-in fade-in zoom-in-95 duration-300">
+           <Card className="w-full max-w-sm bg-white rounded-3xl overflow-hidden shadow-2xl border-0">
+             <div className="bg-[#635BFF] p-6 text-white text-center">
+                <CreditCard className="w-12 h-12 mx-auto mb-3 opacity-90" />
+                <h2 className="text-xl font-bold">Secure Checkout</h2>
+                <p className="text-white/80 text-sm mt-1">{restaurant.name}</p>
+             </div>
+             <CardContent className="p-6 space-y-5 text-black">
+                <div className="flex justify-between items-end border-b border-gray-100 pb-4">
+                  <div className="text-gray-500 text-sm font-medium">Total to pay</div>
+                  <div className="text-3xl font-black">${order?.total.toFixed(2)}</div>
+                </div>
+                <div className="space-y-3">
+                  <div className="h-12 bg-gray-100 rounded-xl w-full flex items-center px-4 text-gray-400 text-sm font-mono tracking-widest border border-gray-200">**** **** **** 4242</div>
+                  <div className="flex gap-3">
+                    <div className="h-12 bg-gray-100 rounded-xl w-1/2 flex items-center px-4 text-gray-400 text-sm border border-gray-200">MM / YY</div>
+                    <div className="h-12 bg-gray-100 rounded-xl w-1/2 flex items-center px-4 text-gray-400 text-sm border border-gray-200">CVC</div>
+                  </div>
+                </div>
+                <Button onClick={completeSimulatedPayment} className="w-full h-12 bg-[#635BFF] hover:bg-[#524be0] text-white rounded-xl text-lg font-semibold shadow-lg shadow-[#635BFF]/30 transition-all">Pay $${order?.total.toFixed(2)}</Button>
+                <div className="text-center text-xs text-gray-400 flex items-center justify-center gap-1">Powered by <span className="font-bold text-gray-700 tracking-tight">stripe</span></div>
+             </CardContent>
+           </Card>
         </div>
       )}
 
-      {/* Menu */}
-      <main className="container mx-auto px-4 py-6">
-        <div className="mx-auto max-w-4xl">
-          <Card className="w-full h-[calc(100svh-220px)] min-h-[460px] bg-[#111] border-white/10 flex flex-col shadow-2xl">
-            <div className="p-3 border-b border-white/10 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-amber-400 to-rose-500 grid place-items-center"><Sparkles className="h-4 w-4 text-black"/></div>
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold truncate">Netrik Concierge</div>
-                  <div className="text-[10px] text-white/50 uppercase tracking-[0.14em]">Chat-first ordering & online payment</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {stage === 'browsing' && <Button size="sm" variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white" onClick={() => setMessages((m) => [...m, { role: 'assistant', text: `Popular picks today: ${menu.slice(0, 3).map((i) => i.name).join(', ')}.` }])}>Suggest</Button>}
-                {(stage === 'served' && order?.status !== 'paid') && <Button size="sm" className="bg-green-500 hover:bg-green-400 text-white" onClick={payNow}><CreditCard className="h-4 w-4 mr-1"/>Pay online</Button>}
-              </div>
-            </div>
-            <ScrollArea className="flex-1 p-3">
-              <div className="space-y-3">
-                {messages.map((m, i) => (
-                  <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[86%] rounded-2xl px-3 py-2 text-sm ${m.role === 'user' ? 'bg-amber-400 text-black' : 'bg-white/10 text-white'}`}>{m.text}</div>
-                  </div>
-                ))}
-                {sending && <div className="flex"><div className="bg-white/10 text-white/60 rounded-2xl px-3 py-2 text-sm animate-pulse">typing…</div></div>}
-                <div ref={chatEndRef}/>
-              </div>
-            </ScrollArea>
-            <div className="p-3 border-t border-white/10 flex items-center gap-2">
-              <Input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendMessage()} placeholder={language === 'es' ? 'Pide por chat: agrega comida, confirma pedido o paga...' : 'Order by chat: add food, place order, or pay...'} className="bg-white/5 border-white/10" disabled={sending}/>
-              <Button size="icon" onClick={sendMessage} disabled={sending} className="bg-amber-400 text-black hover:bg-amber-300"><Send className="h-4 w-4"/></Button>
-            </div>
-          </Card>
-          <div className="mt-3 text-center text-xs text-white/50">Tip: ask naturally, for example: "Add 2 truffle pasta", "place my order", or "pay now".</div>
-        </div>
-      </main>
-
-      {/* Feedback modal-like card */}
+      {/* Feedback Modal Overlay */}
       {stage === 'feedback' && (
-        <div className="fixed inset-0 z-40 grid place-items-center bg-black/80 p-4">
-          <Card className="bg-[#111] border-white/10 text-white w-full max-w-md">
-            <CardContent className="p-6 text-center">
-              <Receipt className="h-10 w-10 mx-auto text-amber-300"/>
-              <div className="mt-3 text-2xl font-black">How was your meal?</div>
-              <div className="text-sm text-white/50">Your feedback helps {restaurant.name} improve.</div>
-              <div className="mt-5 flex justify-center gap-1">
+        <div className="absolute inset-0 z-40 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-500">
+          <Card className="bg-[#1c1c1e] border border-white/10 text-white w-full max-w-sm rounded-3xl shadow-2xl">
+            <CardContent className="p-8 text-center">
+              <Receipt className="h-12 w-12 mx-auto text-amber-400 mb-4"/>
+              <div className="text-2xl font-black mb-2">How was it?</div>
+              <div className="text-sm text-white/60 leading-relaxed mb-6">Your feedback directly helps {restaurant.name} improve their service.</div>
+              <div className="flex justify-center gap-2 mb-6">
                 {[1,2,3,4,5].map(n => (
-                  <button key={n} onClick={()=>setRating(n)} className={n <= rating ? 'text-amber-300' : 'text-white/30'}>
-                    <Star className="h-8 w-8" fill={n <= rating ? 'currentColor' : 'none'}/>
+                  <button key={n} onClick={()=>setRating(n)} className={`transition-transform hover:scale-110 ${n <= rating ? 'text-amber-400' : 'text-white/20'}`}>
+                    <Star className="h-10 w-10" fill={n <= rating ? 'currentColor' : 'none'}/>
                   </button>
                 ))}
               </div>
-              <Input placeholder="Optional comment…" value={feedback} onChange={e=>setFeedback(e.target.value)} className="mt-4 bg-white/5 border-white/10"/>
-              <Button onClick={submitFeedback} className="mt-4 w-full bg-amber-400 text-black hover:bg-amber-300">Submit</Button>
+              <Input placeholder="Leave a nice comment (optional)..." value={feedback} onChange={e=>setFeedback(e.target.value)} className="bg-black/50 border-white/10 rounded-xl h-12 mb-4 placeholder:text-white/30 text-[15px]"/>
+              <Button onClick={submitFeedback} className="w-full bg-amber-400 text-black hover:bg-amber-300 h-12 rounded-xl text-lg font-bold shadow-lg shadow-amber-400/20">Submit Feedback</Button>
             </CardContent>
           </Card>
         </div>
       )}
 
+      <style jsx global>{`
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+        .pt-safe { padding-top: env(safe-area-inset-top); }
+      `}</style>
     </div>
   );
 }
+

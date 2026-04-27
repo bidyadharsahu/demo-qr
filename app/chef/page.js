@@ -21,8 +21,23 @@ export default function ChefDashboard() {
     if (!u || u.type !== 'chef') { router.push('/login'); return; }
     setMe(u);
     load(u);
-    const id = setInterval(() => load(u), 3000);
-    return () => clearInterval(id);
+    let channel;
+    if (u) {
+      import('@/lib/supabase').then(({ getSupabase }) => {
+        const sb = getSupabase();
+        if (sb) {
+          channel = sb.channel('chef-realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${u.restaurantId}` }, () => {
+              load(u);
+            })
+            .subscribe();
+        }
+      });
+    }
+
+    return () => {
+      if (channel) channel.unsubscribe();
+    };
   }, [router]);
 
   const load = async (u) => {
