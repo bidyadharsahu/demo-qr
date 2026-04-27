@@ -149,7 +149,8 @@ export default function ManagerDashboard() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ restaurantId: me.restaurantId, sender: 'restaurant', message: supportText })
     });
-    if (!res.ok) return toast.error('Failed to send');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return toast.error(data.error || 'Failed to send');
     setSupportText('');
     loadAll(me);
   };

@@ -140,7 +140,8 @@ export default function CentralAdmin() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ restaurantId: replyOpen.restaurant_id || replyOpen.id, sender: 'central', message: replyText })
     });
-    if (!res.ok) return toast.error('Failed to send reply');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return toast.error(data.error || 'Failed to send reply');
     toast.success('Reply sent');
     setReplyText('');
     refresh();
