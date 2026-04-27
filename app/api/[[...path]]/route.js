@@ -272,8 +272,8 @@ async function handleDemoRequest(path, method, request) {
     };
     db.restaurants.push(row);
     const restaurant = restaurantToApi(row);
-    await sendRestaurantOnboardingEmail(onboardingPayload(restaurant));
-    return json({ restaurant });
+    const mail = await sendRestaurantOnboardingEmail(onboardingPayload(restaurant));
+    return json({ restaurant, mail });
   }
 
   const restMatch = path.match(/^restaurants\/([^\/]+)$/);
@@ -703,8 +703,8 @@ async function handler(request, { params }) {
       const { data, error } = await sb.from('restaurants').insert(row).select('*').single();
       if (error) return err(error.message, 500);
       const restaurant = restaurantToApi(data);
-      await sendRestaurantOnboardingEmail(onboardingPayload(restaurant));
-      return json({ restaurant });
+      const mail = await sendRestaurantOnboardingEmail(onboardingPayload(restaurant));
+      return json({ restaurant, mail });
     }
     const restMatch = path.match(/^restaurants\/([^\/]+)$/);
     if (restMatch) {

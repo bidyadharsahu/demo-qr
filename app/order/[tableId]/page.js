@@ -145,7 +145,6 @@ export default function CustomerOrder() {
     });
     setStage('done');
     setMessages(m => [...m, { role: 'assistant', text: `Thank you! 🙏 Hope to see you again at ${restaurant.name}.` }]);
-    setTimeout(() => setChatOpen(false), 2500);
   };
 
   const sendMessage = async () => {

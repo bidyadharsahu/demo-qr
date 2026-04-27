@@ -69,7 +69,13 @@ export default function CentralAdmin() {
     const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
     const data = await res.json();
     if (!res.ok) return toast.error(data.error || 'Failed');
-    toast.success(editing ? 'Restaurant updated' : 'Restaurant created and onboarding email queued');
+    if (editing) {
+      toast.success('Restaurant updated');
+    } else if (data.mail?.sent) {
+      toast.success('Restaurant created and credentials email sent');
+    } else {
+      toast.warning('Restaurant created, but email was not sent. Check SMTP settings.');
+    }
     if (!editing && data.restaurant) {
       setShowCredsFor(data.restaurant);
     }
