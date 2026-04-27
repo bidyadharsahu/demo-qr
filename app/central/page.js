@@ -92,7 +92,7 @@ export default function CentralAdmin() {
     if (!res.ok) return toast.error(data.error || 'Failed');
     if (editing) {
       toast.success('Restaurant updated');
-    } else if (data.mail?.sent) {
+    } else if (data.mailStatus === 'sent_to_background') {
       toast.success('Restaurant created and credentials email sent');
     } else {
       toast.warning('Restaurant created, but email was not sent. Check SMTP settings.');

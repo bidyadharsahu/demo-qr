@@ -22,6 +22,15 @@ function stripJson(text) {
 }
 
 const DEMO_MENU_IMAGE = 'https://images.pexels.com/photos/35420084/pexels-photo-35420084.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940';
+const RANDOM_FOOD_IMAGES = [
+  'https://images.unsplash.com/photo-1544025162-811114bd020f?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1493770348161-369560ae357d?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1473093295043-cdd812d0e601?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=800&q=80',
+];
+const getRandomFoodImage = () => RANDOM_FOOD_IMAGES[Math.floor(Math.random() * RANDOM_FOOD_IMAGES.length)];
 const DEMO_DB_KEY = '_netrik_demo_db';
 const DEMO_MODE_ENABLED = String(process.env.NETRIK_DEMO_MODE || process.env.DEMO_MODE || '').toLowerCase() === 'true';
 
@@ -337,7 +346,7 @@ async function handleDemoRequest(path, method, request) {
       description: body.description || '',
       price: parseFloat(body.price) || 0,
       category: body.category || 'Mains',
-      image: body.image || DEMO_MENU_IMAGE,
+      image: body.image || getRandomFoodImage(),
       available: body.available !== false,
       created_at: nowIso(),
     };
@@ -787,7 +796,7 @@ async function handler(request, { params }) {
         description: body.description || '',
         price: parseFloat(body.price) || 0,
         category: body.category || 'Mains',
-        image: body.image || '',
+        image: body.image || getRandomFoodImage(),
         available: body.available !== false,
       };
       const { data, error } = await sb.from('menu').insert(row).select('*').single();
@@ -1070,7 +1079,7 @@ ORDER STAGE: ${stage}
       ];
       let raw;
       try {
-        raw = await llmChat({ messages, model: 'llama3-70b-8192', temperature: 0.8 });
+        raw = await llmChat({ messages, model: 'llama-3.3-70b-versatile', temperature: 0.8 });
       } catch (e) {
         console.error('LLM err', e);
         return json({ reply: language === 'es' ? 'Disculpe, tuve un problema. ¿Podría repetir?' : 'Sorry, I had a hiccup. Could you repeat that?', actions: null });

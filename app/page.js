@@ -58,12 +58,12 @@ export default function Home() {
         </div>
         <div className="mt-14 grid md:grid-cols-3 gap-6">
           {[
-            { t: 'AI Waiter Bot', d: 'Customers scan a QR, chat with an AI that takes orders, suggests dishes, handles allergies & spice levels — bilingual.', img: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=800&q=80' },
-            { t: 'QR Table Ordering', d: 'Generate printable QR codes per table. Status updates live to Available / Occupied / Paid.', img: 'https://images.unsplash.com/photo-1511690656952-34342bb7c2f2?auto=format&fit=crop&w=800&q=80' },
+            { t: 'AI Waiter Bot', d: 'Customers scan a QR, chat with an AI that takes orders, suggests dishes, handles allergies & spice levels — bilingual.', img: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80' },
+            { t: 'QR Table Ordering', d: 'Generate printable QR codes per table. Status updates live to Available / Occupied / Paid.', img: 'https://images.unsplash.com/photo-1621252179027-94459d278660?auto=format&fit=crop&w=800&q=80' },
             { t: 'Kitchen Tickets', d: 'Real-time bilingual (EN/ES) tickets streamed to chef screens or printers.', img: 'https://images.unsplash.com/photo-1577219491135-ce391730fb2c?auto=format&fit=crop&w=800&q=80' },
-            { t: 'Live Analytics', d: 'Beautiful dashboards: revenue trends, top-selling items, table turnover, downloadable CSV.', img: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80' },
-            { t: 'Smart Menu', d: 'Add dishes with photos, mark availability instantly, customers see updates in real time.', img: 'https://images.unsplash.com/photo-1544025162-811114bd020f?auto=format&fit=crop&w=800&q=80' },
-            { t: 'Multi-tenant', d: 'One central admin, unlimited restaurants. Each gets a branded panel — “X Restaurant by Netrik Shop”.', img: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80' },
+            { t: 'Live Analytics', d: 'Beautiful dashboards: revenue trends, top-selling items, table turnover, downloadable CSV.', img: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80' },
+            { t: 'Smart Menu', d: 'Add dishes with photos, mark availability instantly, customers see updates in real time.', img: 'https://images.unsplash.com/photo-1414235077428-33898869228e?auto=format&fit=crop&w=800&q=80' },
+            { t: 'Multi-tenant', d: 'One central admin, unlimited restaurants. Each gets a branded panel — “X Restaurant by Netrik Shop”.', img: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80' },
           ].map((f) => (
             <Card key={f.t} className="bg-white/5 border-white/10 overflow-hidden group hover:bg-white/[0.07] transition-colors">
               <div className="h-40 overflow-hidden">
