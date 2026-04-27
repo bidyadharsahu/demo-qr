@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { LogOut, BarChart3, ClipboardList, UtensilsCrossed, Table2, ChefHat, Plus, Trash2, Pencil, Printer, QrCode, DollarSign, TrendingUp, Download, Clock, CheckCircle2, Mail, MessageCircle, MessageSquare } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -272,7 +273,7 @@ export default function ManagerDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex h-9 items-center rounded-md border border-white/20 bg-white/5 px-3 text-sm text-white/80 font-medium whitespace-nowrap"><Clock className="h-4 w-4 mr-2"/>{tampaDateTime}</div>
+            <div className="flex h-9 items-center rounded-md border border-white/20 bg-white/5 px-3 text-sm text-white/80 font-medium whitespace-nowrap"><Clock className="h-4 w-4 mr-2"/>{clock.toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'full', timeStyle: 'short' })}</div>
             <Button size="sm" variant="outline" className="h-9 border-white/20 bg-white/5 hover:bg-white/10 hover:text-white text-white/80 relative" onClick={() => setSupportOpen(true)}>
               <MessageSquare className="h-4 w-4 mr-2"/>Contact support
               {supportMessages.filter(m => m.sender === 'central' && !m.read).length > 0 && (
