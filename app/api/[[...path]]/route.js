@@ -1070,7 +1070,7 @@ ORDER STAGE: ${stage}
       ];
       let raw;
       try {
-        raw = await llmChat({ messages, model: 'gemini-2.5-flash', temperature: 0.8 });
+        raw = await llmChat({ messages, model: 'llama3-70b-8192', temperature: 0.8 });
       } catch (e) {
         console.error('LLM err', e);
         return json({ reply: language === 'es' ? 'Disculpe, tuve un problema. ¿Podría repetir?' : 'Sorry, I had a hiccup. Could you repeat that?', actions: null });
