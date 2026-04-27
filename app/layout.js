@@ -13,7 +13,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className="dark">
       <body className="min-h-screen bg-background text-foreground antialiased">
         {children}
         <Toaster richColors position="top-right" />
