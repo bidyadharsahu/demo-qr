@@ -420,7 +420,7 @@ export default function CentralAdmin() {
                 <Label>Enter delete password</Label>
                 <Input type="password" value={deletePassword} onChange={(e)=>setDeletePassword(e.target.value)} className="mt-1.5 bg-white/5 border-white/10" placeholder="Type password"/>
               </div>
-              <div className="text-xs text-white/40">Delete password: {DELETE_PASSWORD_HINT}</div>
+
             </div>
             <DialogFooter>
               <Button variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white" onClick={() => setDeleteTarget(null)}>Cancel</Button>
