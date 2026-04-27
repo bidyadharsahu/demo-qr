@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { LogOut, BarChart3, ClipboardList, UtensilsCrossed, Table2, ChefHat, Plus, Trash2, Pencil, Printer, QrCode, DollarSign, TrendingUp, Download, Clock, CheckCircle2 } from 'lucide-react';
+import { LogOut, BarChart3, ClipboardList, UtensilsCrossed, Table2, ChefHat, Plus, Trash2, Pencil, Printer, QrCode, DollarSign, TrendingUp, Download, Clock, CheckCircle2, Mail, MessageCircle } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { NetrikLogo } from '@/components/netrik-logo';
 
@@ -25,6 +25,10 @@ export default function ManagerDashboard() {
   const [me, setMe] = useState(null);
   const [restaurant, setRestaurant] = useState(null);
   const [tab, setTab] = useState('analytics');
+  const [clock, setClock] = useState(() => new Date());
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [kitchenLanguage, setKitchenLanguage] = useState('both');
 
   const [menu, setMenu] = useState([]);
   const [tables, setTables] = useState([]);
@@ -44,19 +48,22 @@ export default function ManagerDashboard() {
     if (!u || u.type !== 'manager') { router.push('/login'); return; }
     setMe(u);
     loadAll(u);
-    const id = setInterval(() => loadAll(u, true), 5000);
-    return () => clearInterval(id);
-  }, []);
+    const refreshId = setInterval(() => loadAll(u, true), 3000);
+    const clockId = setInterval(() => setClock(new Date()), 1000);
+    return () => {
+      clearInterval(refreshId);
+      clearInterval(clockId);
+    };
+  }, [router]);
 
   const loadAll = async (u, silent = false) => {
     if (!u) return;
-    const headers = { 'X-User-Id': u.userId, 'X-Restaurant-Id': u.restaurantId };
     const [r, m, t, o, a] = await Promise.all([
-      fetch(`/api/restaurants/${u.restaurantId}`).then(r => r.json()),
-      fetch(`/api/menu?restaurantId=${u.restaurantId}`).then(r => r.json()),
-      fetch(`/api/tables?restaurantId=${u.restaurantId}`).then(r => r.json()),
-      fetch(`/api/orders?restaurantId=${u.restaurantId}`).then(r => r.json()),
-      fetch(`/api/analytics?restaurantId=${u.restaurantId}`).then(r => r.json()),
+      fetch(`/api/restaurants/${u.restaurantId}`, { cache: 'no-store' }).then(r => r.json()),
+      fetch(`/api/menu?restaurantId=${u.restaurantId}`, { cache: 'no-store' }).then(r => r.json()),
+      fetch(`/api/tables?restaurantId=${u.restaurantId}`, { cache: 'no-store' }).then(r => r.json()),
+      fetch(`/api/orders?restaurantId=${u.restaurantId}`, { cache: 'no-store' }).then(r => r.json()),
+      fetch(`/api/analytics?restaurantId=${u.restaurantId}`, { cache: 'no-store' }).then(r => r.json()),
     ]);
     setRestaurant(r.restaurant); setMenu(m.menu || []); setTables(t.tables || []); setOrders(o.orders || []); setAnalytics(a || {});
   };
@@ -110,19 +117,89 @@ export default function ManagerDashboard() {
     loadAll(me);
   };
 
-  const downloadCSV = () => {
-    const rows = [['Date','Order #','Table','Items','Total','Status']];
-    orders.forEach(o => {
-      rows.push([new Date(o.createdAt).toLocaleString(), o.id.slice(0,8), o.tableNumber, o.items.map(i=>`${i.qty}x ${i.name}`).join('; '), o.total.toFixed(2), o.status]);
+  const toRange = (value, endOfDay = false) => {
+    if (!value) return null;
+    const d = new Date(value);
+    if (endOfDay) d.setHours(23, 59, 59, 999);
+    else d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
+  const orderInRange = (order, start, end) => {
+    const ts = new Date(order.createdAt);
+    const s = toRange(start, false);
+    const e = toRange(end, true);
+    if (s && ts < s) return false;
+    if (e && ts > e) return false;
+    return true;
+  };
+
+  const filteredOrders = useMemo(() => orders.filter((o) => orderInRange(o, startDate, endDate)), [orders, startDate, endDate]);
+
+  const downloadCSV = (dataRows = orders, filenamePrefix = 'orders') => {
+    const csvRows = [['Date','Order #','Table','Items','Total','Status']];
+    dataRows.forEach(o => {
+      csvRows.push([new Date(o.createdAt).toLocaleString(), o.id.slice(0,8), o.tableNumber, o.items.map(i=>`${i.qty}x ${i.name}`).join('; '), o.total.toFixed(2), o.status]);
     });
-    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const csv = csvRows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `orders-${Date.now()}.csv`; a.click();
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filenamePrefix}-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const printOrdersA4 = (rows = orders, title = 'Orders Report') => {
+    const w = window.open('', '_blank');
+    if (!w) return;
+    const itemsToText = (items = []) => items.map((i) => `${i.qty}x ${i.name}`).join(', ');
+    const bodyRows = rows.map((o) => `
+      <tr>
+        <td>${new Date(o.createdAt).toLocaleString()}</td>
+        <td>${o.id.slice(0, 8)}</td>
+        <td>${o.tableNumber}</td>
+        <td>${itemsToText(o.items)}</td>
+        <td>$${o.total.toFixed(2)}</td>
+        <td>${o.status}</td>
+      </tr>
+    `).join('');
+
+    w.document.write(`<html><head><title>${title}</title><style>
+      @page{size:A4;margin:14mm}
+      body{font-family:Segoe UI,Arial,sans-serif;color:#111}
+      h1{font-size:18px;margin:0}
+      p{color:#444;font-size:12px;margin:6px 0 14px}
+      table{width:100%;border-collapse:collapse;font-size:11px}
+      th,td{border:1px solid #ddd;padding:6px;vertical-align:top;text-align:left}
+      th{background:#f6f6f6;text-transform:uppercase;font-size:10px;letter-spacing:.04em}
+    </style></head><body>
+      <h1>${restaurant?.name || 'Restaurant'} - ${title}</h1>
+      <p>Printed: ${new Date().toLocaleString()} | Rows: ${rows.length}</p>
+      <table>
+        <thead><tr><th>Date</th><th>Order</th><th>Table</th><th>Items</th><th>Total</th><th>Status</th></tr></thead>
+        <tbody>${bodyRows || '<tr><td colspan="6">No rows found</td></tr>'}</tbody>
+      </table>
+      <script>window.onload=()=>window.print()</script>
+    </body></html>`);
+    w.document.close();
+  };
+
+  const setTodayRange = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    setStartDate(today);
+    setEndDate(today);
   };
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const tableUrl = (t) => `${baseUrl}/order/${t.id}`;
+
+  const tampaDateTime = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    dateStyle: 'full',
+    timeStyle: 'medium',
+  }).format(clock);
 
   const printQR = (t) => {
     const w = window.open('', '_blank');
@@ -148,13 +225,24 @@ export default function ManagerDashboard() {
       <header className="border-b border-white/10 sticky top-0 bg-black/60 backdrop-blur z-30">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <NetrikLogo className="h-10 w-10"/>
+            {restaurant.logoUrl ? (
+              <img src={restaurant.logoUrl} alt={restaurant.name} className="h-10 w-10 rounded-lg border border-white/10 object-cover"/>
+            ) : (
+              <NetrikLogo className="h-10 w-10"/>
+            )}
             <div>
               <div className="font-bold">{restaurant.name}</div>
               <div className="text-[10px] uppercase tracking-[0.2em] text-amber-300/80">by Netrik Shop · Manager</div>
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <Badge variant="outline" className="border-white/20 bg-white/5 text-white/80"><Clock className="h-3 w-3 mr-1"/>{tampaDateTime}</Badge>
+            <Button asChild size="sm" variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white">
+              <a href="mailto:namasterides26@gmail.com?subject=Netrik%20Support%20Request"><Mail className="h-4 w-4 mr-1"/>Contact support</a>
+            </Button>
+            <Button asChild size="sm" variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white">
+              <a href="https://wa.me/16562145190?text=Hi%20Netrik%20Support%2C%20I%20need%20help%20with%20my%20restaurant%20dashboard" target="_blank" rel="noreferrer"><MessageCircle className="h-4 w-4 mr-1"/>WhatsApp</a>
+            </Button>
             <Badge className="bg-green-400/20 text-green-300 border-green-400/30"><span className="h-1.5 w-1.5 rounded-full bg-green-400 mr-1.5 animate-pulse"/> Live</Badge>
             <Button variant="ghost" className="text-white/70" onClick={() => { localStorage.removeItem('netrik_user'); router.push('/login'); }}><LogOut className="h-4 w-4 mr-2"/>Logout</Button>
           </div>
@@ -163,7 +251,7 @@ export default function ManagerDashboard() {
 
       <main className="container mx-auto px-6 py-8">
         <Tabs value={tab} onValueChange={setTab} className="space-y-6">
-          <TabsList className="bg-white/5 border border-white/10 grid grid-cols-5 max-w-3xl">
+          <TabsList className="bg-white/5 border border-white/10 grid grid-cols-5 max-w-3xl mx-auto">
             <TabsTrigger value="analytics" className="data-[state=active]:bg-amber-400 data-[state=active]:text-black"><BarChart3 className="h-4 w-4 mr-1.5"/>Analytics</TabsTrigger>
             <TabsTrigger value="orders" className="data-[state=active]:bg-amber-400 data-[state=active]:text-black"><ClipboardList className="h-4 w-4 mr-1.5"/>Orders</TabsTrigger>
             <TabsTrigger value="menu" className="data-[state=active]:bg-amber-400 data-[state=active]:text-black"><UtensilsCrossed className="h-4 w-4 mr-1.5"/>Menu</TabsTrigger>
@@ -173,6 +261,25 @@ export default function ManagerDashboard() {
 
           {/* Analytics */}
           <TabsContent value="analytics" className="space-y-6">
+            <Card className="bg-white/5 border-white/10">
+              <CardContent className="p-4 md:p-5">
+                <div className="flex flex-wrap items-end gap-3">
+                  <div>
+                    <Label className="text-xs text-white/60">Start date</Label>
+                    <Input type="date" value={startDate} onChange={(e)=>setStartDate(e.target.value)} className="mt-1 w-[170px] bg-white/5 border-white/10"/>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-white/60">End date</Label>
+                    <Input type="date" value={endDate} onChange={(e)=>setEndDate(e.target.value)} className="mt-1 w-[170px] bg-white/5 border-white/10"/>
+                  </div>
+                  <Button size="sm" variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white" onClick={setTodayRange}>Today</Button>
+                  <Button size="sm" variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white" onClick={()=>{setStartDate(''); setEndDate('');}}>Clear</Button>
+                  <Button size="sm" variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white" onClick={()=>downloadCSV(filteredOrders, 'orders-range')}><Download className="h-4 w-4 mr-2"/>CSV</Button>
+                  <Button size="sm" variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white" onClick={()=>printOrdersA4(filteredOrders, 'Orders Report (A4)')}><Printer className="h-4 w-4 mr-2"/>Print A4</Button>
+                  <div className="text-xs text-white/50 ml-auto">Rows in range: {filteredOrders.length}</div>
+                </div>
+              </CardContent>
+            </Card>
             <div className="grid md:grid-cols-4 gap-5">
               {[
                 { i: <DollarSign/>, t: "Today's revenue", v: `$${analytics.todayRevenue?.toFixed(2) || '0.00'}` },
@@ -194,7 +301,7 @@ export default function ManagerDashboard() {
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <div className="font-semibold">Revenue · last 7 days</div>
-                    <Button variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white" size="sm" onClick={downloadCSV}><Download className="h-4 w-4 mr-2"/>CSV</Button>
+                    <Button variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white" size="sm" onClick={() => downloadCSV(filteredOrders, 'orders-range')}><Download className="h-4 w-4 mr-2"/>CSV</Button>
                   </div>
                   <ResponsiveContainer width="100%" height={260}>
                     <LineChart data={analytics.last7 || []}>
@@ -246,7 +353,10 @@ export default function ManagerDashboard() {
           <TabsContent value="orders" className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="text-sm text-white/60">{liveOrders.length} live orders</div>
-              <Button variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white" size="sm" onClick={downloadCSV}><Download className="h-4 w-4 mr-2"/>Download CSV</Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white" size="sm" onClick={() => downloadCSV(filteredOrders, 'orders-range')}><Download className="h-4 w-4 mr-2"/>Download CSV</Button>
+                <Button variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white" size="sm" onClick={() => printOrdersA4(filteredOrders, 'Orders Report (A4)')}><Printer className="h-4 w-4 mr-2"/>Print A4</Button>
+              </div>
             </div>
             <div className="grid lg:grid-cols-2 gap-4">
               {orders.length === 0 && (<Card className="bg-white/5 border-white/10"><CardContent className="p-10 text-center text-white/40">No orders yet — customers will scan a table QR to place orders.</CardContent></Card>)}
@@ -399,7 +509,25 @@ export default function ManagerDashboard() {
 
           {/* Kitchen */}
           <TabsContent value="kitchen" className="space-y-4">
-            <div className="text-sm text-white/60">{pendingOrders.length} active tickets · bilingual EN/ES</div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-sm text-white/60">{pendingOrders.length} active tickets · bilingual EN/ES</div>
+              <div className="inline-flex rounded-lg border border-white/10 bg-white/5 p-1">
+                {[
+                  ['en', 'English'],
+                  ['es', 'Spanish'],
+                  ['both', 'Both'],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setKitchenLanguage(value)}
+                    className={`rounded-md px-3 py-1.5 text-xs transition ${kitchenLanguage === value ? 'bg-amber-400 text-black' : 'text-white/70 hover:bg-white/10'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {pendingOrders.length === 0 && <Card className="col-span-full bg-white/5 border-white/10"><CardContent className="p-10 text-center text-white/40">No tickets in the kitchen.</CardContent></Card>}
               {pendingOrders.map(o => (
@@ -408,29 +536,31 @@ export default function ManagerDashboard() {
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-xs text-white/50">Ticket #{o.id.slice(0,6).toUpperCase()}</div>
-                        <div className="text-2xl font-black">Table {o.tableNumber} · Mesa {o.tableNumber}</div>
+                        <div className="text-2xl font-black">
+                          {kitchenLanguage === 'es' ? `Mesa ${o.tableNumber}` : kitchenLanguage === 'both' ? `Table ${o.tableNumber} · Mesa ${o.tableNumber}` : `Table ${o.tableNumber}`}
+                        </div>
                       </div>
                       <Badge className={o.status === 'pending' ? 'bg-amber-400/20 text-amber-300 border-amber-400/30' : 'bg-blue-400/20 text-blue-300 border-blue-400/30'}>{o.status}</Badge>
                     </div>
                     <div className="mt-3 space-y-2">
                       {o.items.map((i,idx) => (
                         <div key={idx} className="rounded-lg bg-black/40 border border-white/5 p-2">
-                          <div className="font-semibold">{i.qty}× {i.name}</div>
-                          {i.nameEs && <div className="text-xs text-amber-300/80">{i.qty}× {i.nameEs}</div>}
-                          {i.notes && <div className="text-xs text-white/50 mt-1">Note: {i.notes}</div>}
+                          <div className="font-semibold">{i.qty}× {kitchenLanguage === 'es' ? (i.nameEs || i.name) : i.name}</div>
+                          {kitchenLanguage === 'both' && i.nameEs && <div className="text-xs text-amber-300/80">{i.qty}× {i.nameEs}</div>}
+                          {i.notes && <div className="text-xs text-white/50 mt-1">{kitchenLanguage === 'es' ? 'Nota' : kitchenLanguage === 'both' ? 'Note / Nota' : 'Note'}: {i.notes}</div>}
                         </div>
                       ))}
                     </div>
                     {(o.allergy || o.spicyLevel) && (
                       <div className="mt-3 rounded-lg bg-rose-400/10 border border-rose-400/30 p-2 text-xs">
-                        {o.allergy && <div><span className="font-semibold text-rose-300">Allergy / Alergia:</span> {o.allergy}</div>}
-                        {o.spicyLevel && <div><span className="font-semibold text-rose-300">Spice / Picante:</span> {o.spicyLevel}</div>}
+                        {o.allergy && <div><span className="font-semibold text-rose-300">{kitchenLanguage === 'es' ? 'Alergia' : kitchenLanguage === 'both' ? 'Allergy / Alergia' : 'Allergy'}:</span> {o.allergy}</div>}
+                        {o.spicyLevel && <div><span className="font-semibold text-rose-300">{kitchenLanguage === 'es' ? 'Picante' : kitchenLanguage === 'both' ? 'Spice / Picante' : 'Spice'}:</span> {o.spicyLevel}</div>}
                       </div>
                     )}
                     <div className="mt-3 flex justify-between">
                       <div className="text-xs text-white/40 inline-flex items-center"><Clock className="h-3 w-3 mr-1"/>{new Date(o.createdAt).toLocaleTimeString()}</div>
-                      {o.status === 'pending' && <Button size="sm" onClick={()=>setOrderStatus(o,'preparing')} className="bg-amber-400 text-black hover:bg-amber-300">Start / Iniciar</Button>}
-                      {o.status === 'preparing' && <Button size="sm" onClick={()=>setOrderStatus(o,'ready')} className="bg-green-500 hover:bg-green-400"><CheckCircle2 className="h-3.5 w-3.5 mr-1"/>Ready / Listo</Button>}
+                      {o.status === 'pending' && <Button size="sm" onClick={()=>setOrderStatus(o,'preparing')} className="bg-amber-400 text-black hover:bg-amber-300">{kitchenLanguage === 'es' ? 'Iniciar' : kitchenLanguage === 'both' ? 'Start / Iniciar' : 'Start'}</Button>}
+                      {o.status === 'preparing' && <Button size="sm" onClick={()=>setOrderStatus(o,'ready')} className="bg-green-500 hover:bg-green-400"><CheckCircle2 className="h-3.5 w-3.5 mr-1"/>{kitchenLanguage === 'es' ? 'Listo' : kitchenLanguage === 'both' ? 'Ready / Listo' : 'Ready'}</Button>}
                     </div>
                   </CardContent>
                 </Card>

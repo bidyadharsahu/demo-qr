@@ -7,9 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { Lock, ShieldCheck, ChefHat, UserCog, ArrowLeft } from 'lucide-react';
+import { Lock, ChefHat, UserCog, ArrowLeft } from 'lucide-react';
 import { NetrikLogo } from '@/components/netrik-logo';
 
 export default function LoginPage() {
@@ -69,11 +69,11 @@ export default function LoginPage() {
             <h1 className="mt-4 text-3xl font-black">Welcome back</h1>
             <p className="text-white/50 text-sm mt-1">Choose your login type below.</p>
             <Tabs value={tab} onValueChange={setTab} className="mt-6">
-              <TabsList className="grid grid-cols-2 bg-white/5 border border-white/10">
-                <TabsTrigger value="staff" className="data-[state=active]:bg-amber-400 data-[state=active]:text-black">Staff Login</TabsTrigger>
-                <TabsTrigger value="central" className="data-[state=active]:bg-amber-400 data-[state=active]:text-black">Central Login</TabsTrigger>
+              <TabsList className="grid h-10 w-full grid-cols-2 bg-white/5 border border-white/10 p-1">
+                <TabsTrigger value="staff" className="h-full rounded-md text-white/70 data-[state=active]:bg-amber-400 data-[state=active]:text-black">Staff Login</TabsTrigger>
+                <TabsTrigger value="central" className="h-full rounded-md text-white/70 data-[state=active]:bg-amber-400 data-[state=active]:text-black">Central Login</TabsTrigger>
               </TabsList>
-              <TabsContent value="staff" className="mt-5">
+              {tab === 'staff' && (
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   <button type="button" onClick={() => setStaffRole('manager')} className={`rounded-xl border p-3 text-left transition ${staffRole === 'manager' ? 'border-amber-400 bg-amber-400/10' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}>
                     <UserCog className="h-5 w-5 mb-1 text-amber-300"/>
@@ -86,14 +86,7 @@ export default function LoginPage() {
                     <div className="text-xs text-white/50">Kitchen view</div>
                   </button>
                 </div>
-              </TabsContent>
-              <TabsContent value="central" className="mt-5">
-                <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm">
-                  <ShieldCheck className="h-5 w-5 text-amber-300 mb-1"/>
-                  <div className="font-semibold">Central Admin</div>
-                  <div className="text-xs text-white/60">Manage all restaurants from one secure control center.</div>
-                </div>
-              </TabsContent>
+              )}
             </Tabs>
             <form onSubmit={submit} className="mt-6 space-y-4">
               <div>
@@ -107,7 +100,7 @@ export default function LoginPage() {
                   <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••" className="bg-white/5 border-white/10 text-white pl-9"/>
                 </div>
               </div>
-              <Button type="submit" disabled={loading} className="w-full bg-amber-400 text-black hover:bg-amber-300 font-semibold h-11">{loading ? 'Signing in…' : 'Sign in'}</Button>
+              <Button type="submit" disabled={loading} className="w-full h-12 rounded-lg bg-amber-400 text-black hover:bg-amber-300 font-semibold shadow-xl shadow-amber-500/20">{loading ? 'Signing in…' : 'Sign in'}</Button>
             </form>
           </CardContent>
         </Card>

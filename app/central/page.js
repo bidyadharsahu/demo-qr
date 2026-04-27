@@ -10,12 +10,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Plus, LogOut, Building2, Users, DollarSign, Activity, QrCode, Pencil, Trash2, Copy, ShieldCheck } from 'lucide-react';
+import { Plus, LogOut, Building2, Users, DollarSign, Activity, QrCode, Pencil, Trash2, Copy, ShieldCheck, Download, Printer, Upload } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { NetrikLogo } from '@/components/netrik-logo';
 
 const SUBSCRIPTIONS = ['Starter', 'Pro', 'Premium', 'Enterprise'];
 const COLORS = ['#fbbf24', '#fb7185', '#34d399', '#60a5fa'];
+const DELETE_PASSWORD_HINT = 'harry';
 
 export default function CentralAdmin() {
   const router = useRouter();
@@ -25,52 +26,163 @@ export default function CentralAdmin() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [showCredsFor, setShowCredsFor] = useState(null);
-  const [form, setForm] = useState({ name: '', ownerName: '', contact: '', address: '', domain: '', subscription: 'Pro' });
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [form, setForm] = useState({
+    name: '',
+    ownerName: '',
+    email: '',
+    contact: '',
+    address: '',
+    domain: '',
+    logoUrl: '',
+    subscription: 'Pro',
+  });
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('netrik_user') || 'null');
     if (!u || u.type !== 'central') { router.push('/login'); return; }
     setMe(u);
     refresh();
-  }, []);
+    const id = setInterval(() => refresh(true), 4000);
+    return () => clearInterval(id);
+  }, [router]);
 
-  const refresh = async () => {
-    const r = await fetch('/api/restaurants');
-    const d = await r.json();
-    setList(d.restaurants || []);
-    const s = await fetch('/api/central/stats');
-    setStats(await s.json());
+  const refresh = async (silent = false) => {
+    try {
+      const [r, s] = await Promise.all([
+        fetch('/api/restaurants', { cache: 'no-store' }),
+        fetch('/api/central/stats', { cache: 'no-store' }),
+      ]);
+      const d = await r.json();
+      setList(d.restaurants || []);
+      setStats(await s.json());
+    } catch (e) {
+      if (!silent) toast.error('Failed to refresh central data');
+    }
   };
 
   const save = async () => {
-    if (!form.name || !form.ownerName || !form.contact) return toast.error('Fill required fields');
+    if (!form.name || !form.ownerName || !form.contact || !form.email) return toast.error('Fill required fields');
     const method = editing ? 'PUT' : 'POST';
     const url = editing ? `/api/restaurants/${editing.id}` : '/api/restaurants';
     const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
     const data = await res.json();
     if (!res.ok) return toast.error(data.error || 'Failed');
-    toast.success(editing ? 'Restaurant updated' : 'Restaurant created');
+    toast.success(editing ? 'Restaurant updated' : 'Restaurant created and onboarding email queued');
     if (!editing && data.restaurant) {
       setShowCredsFor(data.restaurant);
     }
-    setOpen(false); setEditing(null); setForm({ name: '', ownerName: '', contact: '', address: '', domain: '', subscription: 'Pro' });
+    setOpen(false);
+    setEditing(null);
+    setForm({ name: '', ownerName: '', email: '', contact: '', address: '', domain: '', logoUrl: '', subscription: 'Pro' });
     refresh();
   };
 
   const startEdit = (r) => {
     setEditing(r);
-    setForm({ name: r.name, ownerName: r.ownerName, contact: r.contact, address: r.address || '', domain: r.domain || '', subscription: r.subscription });
+    setForm({
+      name: r.name,
+      ownerName: r.ownerName,
+      email: r.email || '',
+      contact: r.contact,
+      address: r.address || '',
+      domain: r.domain || '',
+      logoUrl: r.logoUrl || '',
+      subscription: r.subscription,
+    });
     setOpen(true);
   };
 
-  const remove = async (r) => {
-    if (!confirm(`Delete ${r.name}? This cannot be undone.`)) return;
-    await fetch(`/api/restaurants/${r.id}`, { method: 'DELETE' });
-    toast.success('Deleted');
+  const remove = async () => {
+    if (!deleteTarget) return;
+    const res = await fetch(`/api/restaurants/${deleteTarget.id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deletePassword }),
+    });
+    const data = await res.json();
+    if (!res.ok) return toast.error(data.error || 'Failed to delete restaurant');
+    toast.success('Restaurant deleted');
+    setDeleteTarget(null);
+    setDeletePassword('');
     refresh();
   };
 
+  const handleLogoUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setForm((previous) => ({ ...previous, logoUrl: String(reader.result || '') }));
+      toast.success('Logo loaded');
+    };
+    reader.onerror = () => toast.error('Could not read file');
+    reader.readAsDataURL(file);
+  };
+
   const copy = (text) => { navigator.clipboard.writeText(text); toast.success('Copied'); };
+
+  const downloadRestaurantsCsv = () => {
+    const rows = [['Restaurant','Owner','Email','Contact','Subscription','Domain','Created']];
+    list.forEach((r) => {
+      rows.push([
+        r.name,
+        r.ownerName,
+        r.email || '',
+        r.contact,
+        r.subscription,
+        r.domain || '',
+        new Date(r.createdAt).toLocaleDateString(),
+      ]);
+    });
+    const csv = rows.map((row) => row.map((col) => `"${String(col).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `restaurants-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const printRestaurants = () => {
+    const w = window.open('', '_blank');
+    if (!w) return;
+    const rows = list.map((r) => `
+      <tr>
+        <td>${r.name}</td>
+        <td>${r.ownerName}</td>
+        <td>${r.email || '-'}</td>
+        <td>${r.contact}</td>
+        <td>${r.subscription}</td>
+        <td>${r.domain || '-'}</td>
+        <td>${new Date(r.createdAt).toLocaleDateString()}</td>
+      </tr>
+    `).join('');
+
+    w.document.write(`<html><head><title>Restaurants Report</title><style>
+      body{font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#111}
+      h1{margin:0 0 8px 0}
+      p{margin:0 0 16px 0;color:#444}
+      table{width:100%;border-collapse:collapse;font-size:12px}
+      th,td{border:1px solid #ddd;padding:8px;text-align:left;vertical-align:top}
+      th{background:#f6f6f6;text-transform:uppercase;font-size:11px;letter-spacing:.04em}
+    </style></head><body>
+      <h1>Netrik Shop - Restaurants</h1>
+      <p>Printed on ${new Date().toLocaleString()}</p>
+      <table>
+        <thead><tr><th>Restaurant</th><th>Owner</th><th>Email</th><th>Contact</th><th>Plan</th><th>Domain</th><th>Created</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="7">No restaurants found</td></tr>'}</tbody>
+      </table>
+      <script>window.onload=()=>window.print()</script>
+    </body></html>`);
+    w.document.close();
+  };
 
   if (!me) return null;
 
@@ -164,30 +276,57 @@ export default function CentralAdmin() {
                 <div className="font-semibold text-lg">Restaurants</div>
                 <div className="text-xs text-white/50">{list.length} tenants</div>
               </div>
-              <Dialog open={open} onOpenChange={setOpen}>
-                <DialogTrigger asChild>
-                  <Button onClick={() => { setEditing(null); setForm({ name: '', ownerName: '', contact: '', address: '', domain: '', subscription: 'Pro' }); }} className="bg-amber-400 text-black hover:bg-amber-300"><Plus className="h-4 w-4 mr-2"/>Add restaurant</Button>
-                </DialogTrigger>
-                <DialogContent className="bg-[#111] border-white/10 text-white">
-                  <DialogHeader><DialogTitle>{editing ? 'Edit restaurant' : 'New restaurant'}</DialogTitle></DialogHeader>
-                  <div className="space-y-3">
-                    <div><Label>Restaurant name *</Label><Input value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})} className="bg-white/5 border-white/10"/></div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div><Label>Owner name *</Label><Input value={form.ownerName} onChange={(e)=>setForm({...form,ownerName:e.target.value})} className="bg-white/5 border-white/10"/></div>
-                      <div><Label>Contact *</Label><Input value={form.contact} onChange={(e)=>setForm({...form,contact:e.target.value})} className="bg-white/5 border-white/10"/></div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white" onClick={downloadRestaurantsCsv}><Download className="h-4 w-4 mr-2"/>CSV</Button>
+                <Button size="sm" variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white" onClick={printRestaurants}><Printer className="h-4 w-4 mr-2"/>Print A4</Button>
+                <Dialog open={open} onOpenChange={setOpen}>
+                  <DialogTrigger asChild>
+                    <Button onClick={() => {
+                      setEditing(null);
+                      setForm({ name: '', ownerName: '', email: '', contact: '', address: '', domain: '', logoUrl: '', subscription: 'Pro' });
+                    }} className="bg-amber-400 text-black hover:bg-amber-300"><Plus className="h-4 w-4 mr-2"/>Add restaurant</Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-[#111] border-white/10 text-white max-w-xl">
+                    <DialogHeader><DialogTitle>{editing ? 'Edit restaurant' : 'New restaurant'}</DialogTitle></DialogHeader>
+                    <div className="space-y-3">
+                      <div><Label>Restaurant name *</Label><Input value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})} className="bg-white/5 border-white/10"/></div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div><Label>Owner name *</Label><Input value={form.ownerName} onChange={(e)=>setForm({...form,ownerName:e.target.value})} className="bg-white/5 border-white/10"/></div>
+                        <div><Label>Restaurant email *</Label><Input value={form.email} onChange={(e)=>setForm({...form,email:e.target.value})} placeholder="owner@restaurant.com" className="bg-white/5 border-white/10"/></div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div><Label>Contact *</Label><Input value={form.contact} onChange={(e)=>setForm({...form,contact:e.target.value})} className="bg-white/5 border-white/10"/></div>
+                        <div><Label>Domain (editable later)</Label><Input value={form.domain} onChange={(e)=>setForm({...form,domain:e.target.value})} placeholder="oasis-cafe.com" className="bg-white/5 border-white/10"/></div>
+                      </div>
+                      <div><Label>Address</Label><Input value={form.address} onChange={(e)=>setForm({...form,address:e.target.value})} className="bg-white/5 border-white/10"/></div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="col-span-2"><Label>Logo URL</Label><Input value={form.logoUrl} onChange={(e)=>setForm({...form,logoUrl:e.target.value})} placeholder="https://..." className="bg-white/5 border-white/10"/></div>
+                        <div>
+                          <Label>Upload logo</Label>
+                          <label className="mt-1.5 flex h-10 items-center justify-center rounded-md border border-white/10 bg-white/5 text-sm cursor-pointer hover:bg-white/10">
+                            <Upload className="h-4 w-4 mr-1"/>Upload
+                            <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload}/>
+                          </label>
+                        </div>
+                      </div>
+                      {form.logoUrl && (
+                        <div className="rounded-xl border border-white/10 bg-black/40 p-3 inline-flex items-center gap-3">
+                          <img src={form.logoUrl} alt="logo preview" className="h-12 w-12 rounded-lg object-cover border border-white/15"/>
+                          <div className="text-xs text-white/50">Logo preview</div>
+                        </div>
+                      )}
+                      <div><Label>Subscription plan</Label>
+                        <Select value={form.subscription} onValueChange={(v)=>setForm({...form,subscription:v})}>
+                          <SelectTrigger className="bg-white/5 border-white/10"><SelectValue/></SelectTrigger>
+                          <SelectContent className="bg-[#111] text-white border-white/10">{SUBSCRIPTIONS.map(s=>(<SelectItem key={s} value={s}>{s}</SelectItem>))}</SelectContent>
+                        </Select>
+                      </div>
+                      {!editing && <div className="text-xs text-amber-300/80">On creation, credentials and subscription details will be emailed to this restaurant address.</div>}
                     </div>
-                    <div><Label>Address</Label><Input value={form.address} onChange={(e)=>setForm({...form,address:e.target.value})} className="bg-white/5 border-white/10"/></div>
-                    <div><Label>Domain (editable later)</Label><Input value={form.domain} onChange={(e)=>setForm({...form,domain:e.target.value})} placeholder="oasis-cafe.com" className="bg-white/5 border-white/10"/></div>
-                    <div><Label>Subscription plan</Label>
-                      <Select value={form.subscription} onValueChange={(v)=>setForm({...form,subscription:v})}>
-                        <SelectTrigger className="bg-white/5 border-white/10"><SelectValue/></SelectTrigger>
-                        <SelectContent className="bg-[#111] text-white border-white/10">{SUBSCRIPTIONS.map(s=>(<SelectItem key={s} value={s}>{s}</SelectItem>))}</SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <DialogFooter><Button onClick={save} className="bg-amber-400 text-black hover:bg-amber-300">{editing ? 'Save changes' : 'Create & generate credentials'}</Button></DialogFooter>
-                </DialogContent>
-              </Dialog>
+                    <DialogFooter><Button onClick={save} className="bg-amber-400 text-black hover:bg-amber-300">{editing ? 'Save changes' : 'Create & generate credentials'}</Button></DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -195,6 +334,7 @@ export default function CentralAdmin() {
                   <tr className="border-b border-white/10">
                     <th className="text-left py-3 px-2">Restaurant</th>
                     <th className="text-left py-3 px-2">Owner</th>
+                    <th className="text-left py-3 px-2">Email</th>
                     <th className="text-left py-3 px-2">Plan</th>
                     <th className="text-left py-3 px-2">Domain</th>
                     <th className="text-left py-3 px-2">Created</th>
@@ -202,24 +342,34 @@ export default function CentralAdmin() {
                   </tr>
                 </thead>
                 <tbody>
-                  {list.length === 0 && (<tr><td colSpan={6} className="py-10 text-center text-white/40">No restaurants yet — add your first to get started.</td></tr>)}
+                  {list.length === 0 && (<tr><td colSpan={7} className="py-10 text-center text-white/40">No restaurants yet — add your first to get started.</td></tr>)}
                   {list.map((r) => (
                     <tr key={r.id} className="border-b border-white/5 hover:bg-white/[0.03]">
                       <td className="py-3 px-2">
-                        <div className="font-semibold">{r.name}</div>
-                        <div className="text-xs text-white/40">by Netrik Shop</div>
+                        <div className="flex items-center gap-2">
+                          {r.logoUrl ? (
+                            <img src={r.logoUrl} alt={r.name} className="h-9 w-9 rounded-md border border-white/10 object-cover"/>
+                          ) : (
+                            <NetrikLogo className="h-9 w-9"/>
+                          )}
+                          <div>
+                            <div className="font-semibold">{r.name}</div>
+                            <div className="text-xs text-white/40">by Netrik Shop</div>
+                          </div>
+                        </div>
                       </td>
                       <td className="py-3 px-2">
                         <div>{r.ownerName}</div>
                         <div className="text-xs text-white/40">{r.contact}</div>
                       </td>
+                      <td className="py-3 px-2 text-white/70 text-xs">{r.email || '—'}</td>
                       <td className="py-3 px-2"><Badge className="bg-amber-400/20 text-amber-300 border-amber-400/30">{r.subscription}</Badge></td>
                       <td className="py-3 px-2 font-mono text-xs text-white/60">{r.domain || '—'}</td>
                       <td className="py-3 px-2 text-xs text-white/50">{new Date(r.createdAt).toLocaleDateString()}</td>
                       <td className="py-3 px-2 text-right">
                         <Button size="sm" variant="ghost" className="text-white/70" onClick={() => setShowCredsFor(r)}><QrCode className="h-4 w-4"/></Button>
                         <Button size="sm" variant="ghost" className="text-white/70" onClick={() => startEdit(r)}><Pencil className="h-4 w-4"/></Button>
-                        <Button size="sm" variant="ghost" className="text-rose-400" onClick={() => remove(r)}><Trash2 className="h-4 w-4"/></Button>
+                        <Button size="sm" variant="ghost" className="text-rose-400" onClick={() => setDeleteTarget(r)}><Trash2 className="h-4 w-4"/></Button>
                       </td>
                     </tr>
                   ))}
@@ -248,10 +398,28 @@ export default function CentralAdmin() {
                 <div className="rounded-xl border border-white/10 p-4 bg-black/30 text-center">
                   <div className="text-xs uppercase tracking-wider text-amber-300 mb-2">Tenant QR</div>
                   <img alt="qr" src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(JSON.stringify({ tenant: showCredsFor.id, name: showCredsFor.name, domain: showCredsFor.domain }))}`} className="mx-auto rounded-lg"/>
-                  <div className="text-xs text-white/40 mt-2">Scan to view tenant info</div>
+                  <div className="text-xs text-white/40 mt-2">Onboarding email target: {showCredsFor.email || 'not provided'}</div>
                 </div>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={!!deleteTarget} onOpenChange={(v) => !v && setDeleteTarget(null)}>
+          <DialogContent className="bg-[#111] border-white/10 text-white max-w-md">
+            <DialogHeader><DialogTitle>Delete restaurant</DialogTitle></DialogHeader>
+            <div className="space-y-3">
+              <p className="text-sm text-white/70">This action will permanently remove <span className="font-semibold">{deleteTarget?.name}</span>, including menus, tables, orders and chat history.</p>
+              <div>
+                <Label>Enter delete password</Label>
+                <Input type="password" value={deletePassword} onChange={(e)=>setDeletePassword(e.target.value)} className="mt-1.5 bg-white/5 border-white/10" placeholder="Type password"/>
+              </div>
+              <div className="text-xs text-white/40">Delete password: {DELETE_PASSWORD_HINT}</div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+              <Button className="bg-rose-600 hover:bg-rose-500 text-white" onClick={remove}>Delete</Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </main>

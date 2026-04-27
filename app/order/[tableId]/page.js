@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/co
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Send, ShoppingCart, Plus, Minus, ChefHat, CreditCard, Star, MessageCircle, Sparkles, Receipt, X } from 'lucide-react';
+import { Send, ShoppingCart, Plus, Minus, CreditCard, Star, Sparkles, Receipt, UtensilsCrossed } from 'lucide-react';
 
 const FOOD_FALLBACK = 'https://images.pexels.com/photos/35420084/pexels-photo-35420084.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940';
 
@@ -23,7 +23,6 @@ export default function CustomerOrder() {
   const [allergy, setAllergy] = useState('');
   const [spicy, setSpicy] = useState('');
   const [language, setLanguage] = useState('en');
-  const [chatOpen, setChatOpen] = useState(true);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -37,15 +36,14 @@ export default function CustomerOrder() {
   useEffect(() => {
     if (!tableId) return;
     (async () => {
-      const r = await fetch(`/api/tables/${tableId}`).then(r => r.json());
+      const r = await fetch(`/api/tables/${tableId}`, { cache: 'no-store' }).then(r => r.json());
       if (!r.table) { toast.error('Table not found'); return; }
       setTable(r.table);
-      const rest = await fetch(`/api/restaurants/${r.table.restaurantId}`).then(r => r.json());
+      const rest = await fetch(`/api/restaurants/${r.table.restaurantId}`, { cache: 'no-store' }).then(r => r.json());
       setRestaurant(rest.restaurant);
-      const m = await fetch(`/api/menu?restaurantId=${r.table.restaurantId}&availableOnly=1`).then(r => r.json());
+      const m = await fetch(`/api/menu?restaurantId=${r.table.restaurantId}&availableOnly=1`, { cache: 'no-store' }).then(r => r.json());
       setMenu(m.menu || []);
-      // greet
-      setMessages([{ role: 'assistant', text: `Welcome to ${rest.restaurant?.name}! 🍽️ I'm your AI waiter. Tell me what you're craving and I'll help you order. ¡Bienvenido!` }]);
+      setMessages([{ role: 'assistant', text: `Welcome to ${rest.restaurant?.name}! Tell me what you are craving and I can add items, place your order, and help with online payment.` }]);
     })();
   }, [tableId]);
 
@@ -55,7 +53,7 @@ export default function CustomerOrder() {
   useEffect(() => {
     if (!order) return;
     const id = setInterval(async () => {
-      const r = await fetch(`/api/orders/${order.id}`).then(r => r.json());
+      const r = await fetch(`/api/orders/${order.id}`, { cache: 'no-store' }).then(r => r.json());
       if (r.order) {
         setOrder(r.order);
         if (r.order.status === 'ready' && stage === 'ordered') {
@@ -67,37 +65,56 @@ export default function CustomerOrder() {
     return () => clearInterval(id);
   }, [order, stage]);
 
-  const addToCart = (item) => {
-    setCart(c => {
-      const ex = c.find(x => x.id === item.id);
-      if (ex) return c.map(x => x.id === item.id ? { ...x, qty: x.qty + 1 } : x);
-      return [...c, { id: item.id, name: item.name, nameEs: item.nameEs || '', price: item.price, qty: 1, notes: '' }];
+  const addToCart = (item, quantity = 1, notify = true) => {
+    setCart((current) => {
+      const ex = current.find((x) => x.id === item.id);
+      if (ex) {
+        return current.map((x) => x.id === item.id ? { ...x, qty: x.qty + quantity } : x);
+      }
+      return [...current, { id: item.id, name: item.name, nameEs: item.nameEs || '', price: item.price, qty: quantity, notes: '' }];
     });
-    toast.success(`${item.name} added`);
+    if (notify) toast.success(`${item.name} added`);
   };
+
+  const mergeItemsIntoCart = (baseCart, additions = []) => {
+    const next = [...baseCart.map((x) => ({ ...x }))];
+    additions.forEach((it) => {
+      const foundMenu = menu.find((x) => x.id === it.id || String(x.name).toLowerCase() === String(it.name || '').toLowerCase());
+      if (!foundMenu) return;
+      const qty = Math.max(1, parseInt(it.quantity || '1', 10));
+      const ex = next.find((x) => x.id === foundMenu.id);
+      if (ex) ex.qty += qty;
+      else next.push({ id: foundMenu.id, name: foundMenu.name, nameEs: foundMenu.nameEs || '', price: foundMenu.price, qty, notes: '' });
+    });
+    return next;
+  };
+
   const inc = (id) => setCart(c => c.map(x => x.id === id ? { ...x, qty: x.qty + 1 } : x));
   const dec = (id) => setCart(c => c.flatMap(x => x.id === id ? (x.qty > 1 ? [{ ...x, qty: x.qty - 1 }] : []) : [x]));
   const total = cart.reduce((s, x) => s + x.price * x.qty, 0);
 
-  const placeOrder = async () => {
-    if (cart.length === 0) return toast.error('Cart is empty');
+  const placeOrder = async (itemsOverride = null) => {
+    const items = itemsOverride || cart;
+    if (items.length === 0) return toast.error('Cart is empty');
     const res = await fetch('/api/orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ restaurantId: restaurant.id, tableId: table.id, items: cart, allergy, spicyLevel: spicy }),
+      body: JSON.stringify({ restaurantId: restaurant.id, tableId: table.id, items, allergy, spicyLevel: spicy }),
     });
     const data = await res.json();
     if (!res.ok) return toast.error(data.error || 'Failed');
     setOrder(data.order);
     setStage('ordered');
+    setCart([]);
     toast.success('Order placed!');
     setMessages(m => [...m, { role: 'assistant', text: `✅ Order placed! Ticket #${data.order.id.slice(0,6).toUpperCase()}. The kitchen is preparing your food now.` }]);
   };
 
-  const addOnsAfterOrder = async () => {
-    if (cart.length === 0 || !order) return toast.error('Cart is empty');
+  const addOnsAfterOrder = async (itemsOverride = null) => {
+    const items = itemsOverride || cart;
+    if (items.length === 0 || !order) return toast.error('Cart is empty');
     const res = await fetch(`/api/orders/${order.id}/addons`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: cart }),
+      body: JSON.stringify({ items }),
     });
     const data = await res.json();
     if (!res.ok) return toast.error(data.error || 'Failed');
@@ -151,17 +168,25 @@ export default function CustomerOrder() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Chat failed');
       setMessages(m => [...m, { role: 'assistant', text: data.reply }]);
-      // Bot may suggest items to add
+
+      let nextCart = cart;
       if (data.actions?.add_items?.length) {
-        for (const it of data.actions.add_items) {
-          const found = menu.find(x => x.id === it.id || x.name.toLowerCase() === (it.name || '').toLowerCase());
-          if (found) {
-            for (let i = 0; i < (it.quantity || 1); i++) addToCart(found);
-          }
-        }
+        nextCart = mergeItemsIntoCart(cart, data.actions.add_items);
+        setCart(nextCart);
+        toast.success('Items added from chat');
       }
+
       if (data.actions?.set_allergy) setAllergy(data.actions.set_allergy);
       if (data.actions?.set_spicy) setSpicy(data.actions.set_spicy);
+
+      if (data.actions?.place_order) {
+        if (stage === 'browsing') await placeOrder(nextCart);
+        else if (stage === 'ordered' || stage === 'served') await addOnsAfterOrder(nextCart);
+      }
+
+      if (data.actions?.pay_now && order && order.status !== 'paid') {
+        await payNow();
+      }
     } catch (e) {
       setMessages(m => [...m, { role: 'assistant', text: 'Sorry, I had a hiccup. Could you say that again?' }]);
     } finally {
@@ -187,6 +212,34 @@ export default function CustomerOrder() {
                 <SelectItem value="es">ES</SelectItem>
               </SelectContent>
             </Select>
+
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button size="sm" variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white"><UtensilsCrossed className="h-4 w-4 mr-1"/>Menu</Button>
+              </SheetTrigger>
+              <SheetContent className="bg-[#111] border-white/10 text-white w-full sm:max-w-lg overflow-y-auto">
+                <SheetHeader><SheetTitle className="text-white">Menu quick picks</SheetTitle></SheetHeader>
+                <div className="mt-4 grid gap-3">
+                  {menu.map((item) => (
+                    <Card key={item.id} className="bg-white/5 border-white/10 overflow-hidden">
+                      <div className="h-32 overflow-hidden"><img src={item.image || FOOD_FALLBACK} className="w-full h-full object-cover"/></div>
+                      <CardContent className="p-3">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="font-semibold">{item.name}</div>
+                            <div className="text-xs text-white/50">{item.category}</div>
+                          </div>
+                          <div className="font-semibold text-amber-300">${item.price.toFixed(2)}</div>
+                        </div>
+                        {item.description && <div className="text-xs text-white/60 mt-2 line-clamp-2">{item.description}</div>}
+                        <Button size="sm" className="mt-3 w-full bg-amber-400 text-black hover:bg-amber-300" onClick={() => addToCart(item)}><Plus className="h-4 w-4 mr-1"/>Add</Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </SheetContent>
+            </Sheet>
+
             <Sheet>
               <SheetTrigger asChild><Button size="sm" variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white relative"><ShoppingCart className="h-4 w-4 mr-1"/>Cart{cart.length > 0 && <Badge className="ml-2 bg-amber-400 text-black">{cart.reduce((s,x)=>s+x.qty,0)}</Badge>}</Button></SheetTrigger>
               <SheetContent className="bg-[#111] border-white/10 text-white w-full sm:max-w-md overflow-y-auto">
@@ -221,9 +274,9 @@ export default function CustomerOrder() {
                   <div className="text-2xl font-black text-amber-300">${total.toFixed(2)}</div>
                 </div>
                 {stage === 'browsing' ? (
-                  <Button disabled={cart.length === 0} onClick={placeOrder} className="mt-3 w-full bg-amber-400 text-black hover:bg-amber-300 h-11"><ChefHat className="h-4 w-4 mr-2"/>Place Order</Button>
+                  <Button disabled={cart.length === 0} onClick={() => placeOrder()} className="mt-3 w-full bg-amber-400 text-black hover:bg-amber-300 h-11">Place order</Button>
                 ) : stage === 'ordered' || stage === 'served' ? (
-                  <Button disabled={cart.length === 0} onClick={addOnsAfterOrder} className="mt-3 w-full bg-amber-400 text-black hover:bg-amber-300 h-11"><Plus className="h-4 w-4 mr-2"/>Add to my tab</Button>
+                  <Button disabled={cart.length === 0} onClick={() => addOnsAfterOrder()} className="mt-3 w-full bg-amber-400 text-black hover:bg-amber-300 h-11"><Plus className="h-4 w-4 mr-2"/>Add to my tab</Button>
                 ) : null}
               </SheetContent>
             </Sheet>
@@ -250,26 +303,38 @@ export default function CustomerOrder() {
 
       {/* Menu */}
       <main className="container mx-auto px-4 py-6">
-        <div className="text-amber-300 text-xs uppercase tracking-[0.3em]">Menu</div>
-        <h1 className="text-3xl font-black mt-2">What are you craving today?</h1>
-        <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {menu.length === 0 && <Card className="col-span-full bg-white/5 border-white/10"><CardContent className="p-10 text-center text-white/40">Menu is being prepared.</CardContent></Card>}
-          {menu.map(item => (
-            <Card key={item.id} className="bg-white/5 border-white/10 overflow-hidden">
-              <div className="h-40 overflow-hidden"><img src={item.image || FOOD_FALLBACK} className="w-full h-full object-cover"/></div>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="font-semibold">{item.name}</div>
-                    <div className="text-xs text-white/50">{item.category}</div>
-                  </div>
-                  <div className="font-bold text-amber-300">${item.price.toFixed(2)}</div>
+        <div className="mx-auto max-w-4xl">
+          <Card className="w-full h-[calc(100svh-220px)] min-h-[460px] bg-[#111] border-white/10 flex flex-col shadow-2xl">
+            <div className="p-3 border-b border-white/10 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-amber-400 to-rose-500 grid place-items-center"><Sparkles className="h-4 w-4 text-black"/></div>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold truncate">Netrik Concierge</div>
+                  <div className="text-[10px] text-white/50 uppercase tracking-[0.14em]">Chat-first ordering & online payment</div>
                 </div>
-                {item.description && <div className="text-xs text-white/60 mt-2 line-clamp-2">{item.description}</div>}
-                <Button size="sm" className="mt-3 w-full bg-amber-400 text-black hover:bg-amber-300" onClick={()=>addToCart(item)}><Plus className="h-4 w-4 mr-1"/>Add</Button>
-              </CardContent>
-            </Card>
-          ))}
+              </div>
+              <div className="flex items-center gap-2">
+                {stage === 'browsing' && <Button size="sm" variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10 text-white" onClick={() => setMessages((m) => [...m, { role: 'assistant', text: `Popular picks today: ${menu.slice(0, 3).map((i) => i.name).join(', ')}.` }])}>Suggest</Button>}
+                {(stage === 'served' && order?.status !== 'paid') && <Button size="sm" className="bg-green-500 hover:bg-green-400 text-white" onClick={payNow}><CreditCard className="h-4 w-4 mr-1"/>Pay online</Button>}
+              </div>
+            </div>
+            <ScrollArea className="flex-1 p-3">
+              <div className="space-y-3">
+                {messages.map((m, i) => (
+                  <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[86%] rounded-2xl px-3 py-2 text-sm ${m.role === 'user' ? 'bg-amber-400 text-black' : 'bg-white/10 text-white'}`}>{m.text}</div>
+                  </div>
+                ))}
+                {sending && <div className="flex"><div className="bg-white/10 text-white/60 rounded-2xl px-3 py-2 text-sm animate-pulse">typing…</div></div>}
+                <div ref={chatEndRef}/>
+              </div>
+            </ScrollArea>
+            <div className="p-3 border-t border-white/10 flex items-center gap-2">
+              <Input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendMessage()} placeholder={language === 'es' ? 'Pide por chat: agrega comida, confirma pedido o paga...' : 'Order by chat: add food, place order, or pay...'} className="bg-white/5 border-white/10" disabled={sending}/>
+              <Button size="icon" onClick={sendMessage} disabled={sending} className="bg-amber-400 text-black hover:bg-amber-300"><Send className="h-4 w-4"/></Button>
+            </div>
+          </Card>
+          <div className="mt-3 text-center text-xs text-white/50">Tip: ask naturally, for example: "Add 2 truffle pasta", "place my order", or "pay now".</div>
         </div>
       </main>
 
@@ -295,41 +360,6 @@ export default function CustomerOrder() {
         </div>
       )}
 
-      {/* Chat widget */}
-      <div className="fixed bottom-4 right-4 z-40">
-        {!chatOpen && (
-          <Button onClick={()=>setChatOpen(true)} className="h-14 w-14 rounded-full bg-amber-400 text-black hover:bg-amber-300 shadow-2xl shadow-amber-400/30"><MessageCircle className="h-6 w-6"/></Button>
-        )}
-        {chatOpen && (
-          <Card className="w-[360px] sm:w-[400px] h-[520px] bg-[#111] border-white/10 flex flex-col shadow-2xl">
-            <div className="p-3 border-b border-white/10 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-amber-400 to-rose-500 grid place-items-center"><Sparkles className="h-4 w-4 text-black"/></div>
-                <div>
-                  <div className="text-sm font-semibold">AI Waiter</div>
-                  <div className="text-[10px] text-amber-300/80 uppercase">Powered by Netrik AI</div>
-                </div>
-              </div>
-              <Button size="icon" variant="ghost" onClick={()=>setChatOpen(false)}><X className="h-4 w-4"/></Button>
-            </div>
-            <ScrollArea className="flex-1 p-3">
-              <div className="space-y-3">
-                {messages.map((m, i) => (
-                  <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${m.role === 'user' ? 'bg-amber-400 text-black' : 'bg-white/10 text-white'}`}>{m.text}</div>
-                  </div>
-                ))}
-                {sending && <div className="flex"><div className="bg-white/10 text-white/60 rounded-2xl px-3 py-2 text-sm animate-pulse">typing…</div></div>}
-                <div ref={chatEndRef}/>
-              </div>
-            </ScrollArea>
-            <div className="p-3 border-t border-white/10 flex items-center gap-2">
-              <Input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendMessage()} placeholder={language === 'es' ? 'Pregunta lo que sea…' : 'Ask me anything…'} className="bg-white/5 border-white/10" disabled={sending}/>
-              <Button size="icon" onClick={sendMessage} disabled={sending} className="bg-amber-400 text-black hover:bg-amber-300"><Send className="h-4 w-4"/></Button>
-            </div>
-          </Card>
-        )}
-      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabase, restaurantToApi, menuToApi, tableToApi, orderToApi } from '@/lib/supabase';
 import { llmChat } from '@/lib/llm';
+import { sendRestaurantOnboardingEmail } from '@/lib/mailer';
 
 const json = (data, status = 200) => NextResponse.json(data, { status });
 const err = (message, status = 400) => NextResponse.json({ error: message }, { status });
@@ -8,6 +9,9 @@ const err = (message, status = 400) => NextResponse.json({ error: message }, { s
 const slug = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 18) || 'rest';
 const rand = (n = 4) => Math.random().toString(36).slice(2, 2 + n);
 const randPwd = () => Math.floor(100000 + Math.random() * 900000).toString();
+const DELETE_RESTAURANT_PASSWORD = 'harry';
+const SUPPORT_EMAIL = 'namasterides26@gmail.com';
+const SUPPORT_PHONE = '+1(656)214-5190';
 
 function stripJson(text) {
   const m = text.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -23,6 +27,39 @@ const DEMO_DB_KEY = '_netrik_demo_db';
 const nowIso = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 const escapeRegExp = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+async function readJsonSafe(request) {
+  try {
+    return await request.json();
+  } catch {
+    return {};
+  }
+}
+
+async function assertDeletePassword(request) {
+  const body = await readJsonSafe(request);
+  if ((body.deletePassword || '').trim() !== DELETE_RESTAURANT_PASSWORD) {
+    return { ok: false, body };
+  }
+  return { ok: true, body };
+}
+
+function onboardingPayload(restaurant) {
+  if (!restaurant) return null;
+  return {
+    restaurantName: restaurant.name,
+    ownerName: restaurant.ownerName,
+    toEmail: restaurant.email,
+    subscription: restaurant.subscription,
+    domain: restaurant.domain,
+    address: restaurant.address,
+    contact: restaurant.contact,
+    managerCreds: restaurant.managerCreds,
+    chefCreds: restaurant.chefCreds,
+    supportEmail: SUPPORT_EMAIL,
+    supportPhone: SUPPORT_PHONE,
+  };
+}
 
 function getDemoDb() {
   if (global[DEMO_DB_KEY]) return global[DEMO_DB_KEY];
@@ -47,9 +84,11 @@ function getDemoDb() {
         id: demoRestaurantId,
         name: 'Netrik Demo Bistro',
         owner_name: 'Demo Owner',
+        email: 'owner@demo-bistro.com',
         contact: '+1 555 0100',
         address: '12 Demo Street',
         domain: 'demo.netrik.shop',
+        logo_url: '',
         subscription: 'Pro',
         manager_user_id: 'manager_demo',
         manager_password: '123456',
@@ -169,6 +208,14 @@ function extractDemoChatActions(message = '', menu = []) {
     actions.set_allergy = message.slice(0, 120).trim();
   }
 
+  if (/(place|submit|send|confirm).*(order|pedido)|checkout/.test(lower)) {
+    actions.place_order = true;
+  }
+
+  if (/(pay|payment|charge|pagar|cobrar|card)/.test(lower)) {
+    actions.pay_now = true;
+  }
+
   return Object.keys(actions).length ? actions : null;
 }
 
@@ -202,7 +249,7 @@ async function handleDemoRequest(path, method, request) {
 
   if (path === 'restaurants' && method === 'POST') {
     const body = await request.json();
-    if (!body.name || !body.ownerName || !body.contact) return err('Missing required fields');
+    if (!body.name || !body.ownerName || !body.contact || !body.email) return err('Missing required fields');
 
     const s = slug(body.name) + '_' + rand(4);
     const ts = nowIso();
@@ -210,9 +257,11 @@ async function handleDemoRequest(path, method, request) {
       id: makeId('rest'),
       name: body.name,
       owner_name: body.ownerName,
+      email: body.email,
       contact: body.contact,
       address: body.address || '',
       domain: body.domain || '',
+      logo_url: body.logoUrl || '',
       subscription: body.subscription || 'Pro',
       manager_user_id: 'manager_' + s,
       manager_password: randPwd(),
@@ -222,7 +271,9 @@ async function handleDemoRequest(path, method, request) {
       updated_at: ts,
     };
     db.restaurants.push(row);
-    return json({ restaurant: restaurantToApi(row) });
+    const restaurant = restaurantToApi(row);
+    await sendRestaurantOnboardingEmail(onboardingPayload(restaurant));
+    return json({ restaurant });
   }
 
   const restMatch = path.match(/^restaurants\/([^\/]+)$/);
@@ -240,15 +291,19 @@ async function handleDemoRequest(path, method, request) {
       const row = db.restaurants[idx];
       if (body.name !== undefined) row.name = body.name;
       if (body.ownerName !== undefined) row.owner_name = body.ownerName;
+      if (body.email !== undefined) row.email = body.email;
       if (body.contact !== undefined) row.contact = body.contact;
       if (body.address !== undefined) row.address = body.address;
       if (body.domain !== undefined) row.domain = body.domain;
+      if (body.logoUrl !== undefined) row.logo_url = body.logoUrl;
       if (body.subscription !== undefined) row.subscription = body.subscription;
       row.updated_at = nowIso();
       return json({ restaurant: restaurantToApi(row) });
     }
 
     if (method === 'DELETE') {
+      const auth = await assertDeletePassword(request);
+      if (!auth.ok) return err('Delete password is incorrect', 403);
       db.restaurants.splice(idx, 1);
       db.menu = db.menu.filter((m) => m.restaurant_id !== id);
       db.rest_tables = db.rest_tables.filter((t) => t.restaurant_id !== id);
@@ -629,14 +684,16 @@ async function handler(request, { params }) {
     }
     if (path === 'restaurants' && method === 'POST') {
       const body = await request.json();
-      if (!body.name || !body.ownerName || !body.contact) return err('Missing required fields');
+      if (!body.name || !body.ownerName || !body.contact || !body.email) return err('Missing required fields');
       const s = slug(body.name) + '_' + rand(4);
       const row = {
         name: body.name,
         owner_name: body.ownerName,
+        email: body.email,
         contact: body.contact,
         address: body.address || '',
         domain: body.domain || '',
+        logo_url: body.logoUrl || '',
         subscription: body.subscription || 'Pro',
         manager_user_id: 'manager_' + s,
         manager_password: randPwd(),
@@ -645,7 +702,9 @@ async function handler(request, { params }) {
       };
       const { data, error } = await sb.from('restaurants').insert(row).select('*').single();
       if (error) return err(error.message, 500);
-      return json({ restaurant: restaurantToApi(data) });
+      const restaurant = restaurantToApi(data);
+      await sendRestaurantOnboardingEmail(onboardingPayload(restaurant));
+      return json({ restaurant });
     }
     const restMatch = path.match(/^restaurants\/([^\/]+)$/);
     if (restMatch) {
@@ -661,15 +720,19 @@ async function handler(request, { params }) {
         const upd = { updated_at: new Date().toISOString() };
         if (body.name !== undefined) upd.name = body.name;
         if (body.ownerName !== undefined) upd.owner_name = body.ownerName;
+        if (body.email !== undefined) upd.email = body.email;
         if (body.contact !== undefined) upd.contact = body.contact;
         if (body.address !== undefined) upd.address = body.address;
         if (body.domain !== undefined) upd.domain = body.domain;
+        if (body.logoUrl !== undefined) upd.logo_url = body.logoUrl;
         if (body.subscription !== undefined) upd.subscription = body.subscription;
         const { data, error } = await sb.from('restaurants').update(upd).eq('id', id).select('*').single();
         if (error) return err(error.message, 500);
         return json({ restaurant: restaurantToApi(data) });
       }
       if (method === 'DELETE') {
+        const auth = await assertDeletePassword(request);
+        if (!auth.ok) return err('Delete password is incorrect', 403);
         // FK cascade defined in schema handles menu/tables/orders
         const { error } = await sb.from('restaurants').delete().eq('id', id);
         if (error) return err(error.message, 500);
@@ -936,7 +999,7 @@ async function handler(request, { params }) {
       const history = (session?.history || []);
       const menuStr = menu.map(m => `- ${m.id} | ${m.name} ($${m.price}) [${m.category}]${m.description ? ' — ' + m.description : ''}`).join('\n');
       const cartStr = cart.length ? cart.map(c => `${c.qty}x ${c.name}`).join(', ') : '(empty)';
-      const sys = `You are a warm, witty, professional AI waiter for "${restaurant?.name}". Always reply in ${language === 'es' ? 'Spanish' : 'English'} (mirror the customer's language if they switch). Engage naturally, suggest pairings, mention specials, ask about allergies and spice preferences. Keep replies concise (2-4 sentences max). Sound human, not robotic.
+      const sys = `You are a warm, witty, professional restaurant concierge for "${restaurant?.name}". Always reply in ${language === 'es' ? 'Spanish' : 'English'} (mirror the customer's language if they switch). Engage naturally, suggest pairings, mention specials, ask about allergies and spice preferences. Keep replies concise (2-4 sentences max). Sound human, not robotic.
 
 CURRENT MENU (only recommend these; use the exact id when adding to cart):
 ${menuStr || '(menu loading)'}
@@ -944,11 +1007,13 @@ ${menuStr || '(menu loading)'}
 CURRENT CART: ${cartStr}
 ORDER STAGE: ${stage}
 
-When the customer wants to add items, respond conversationally AND append a JSON code block with actions. Format strictly:
+    When the customer wants to perform an action, respond conversationally AND append a JSON code block with actions. Format strictly:
 \`\`\`json
-{"add_items":[{"id":"<menu-item-id>","name":"<exact name>","quantity":1}], "set_allergy":"<text or empty>", "set_spicy":"<mild|medium|hot|extra-hot|empty>"}
+    {"add_items":[{"id":"<menu-item-id>","name":"<exact name>","quantity":1}], "set_allergy":"<text>", "set_spicy":"<mild|medium|hot|extra-hot>", "place_order":true, "pay_now":true}
 \`\`\`
-Only include keys that change. Do NOT mention the JSON to the customer.`;
+    Use \"place_order\":true when they ask to checkout/place/confirm the order.
+    Use \"pay_now\":true when they ask to pay the bill.
+    Only include keys that change. Do NOT mention the JSON to the customer.`;
       const messages = [
         { role: 'system', content: sys },
         ...history.slice(-12),

@@ -24,9 +24,11 @@ CREATE TABLE IF NOT EXISTS public.restaurants (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name            TEXT NOT NULL,
   owner_name      TEXT NOT NULL,
+  email           TEXT DEFAULT '',
   contact         TEXT NOT NULL,
   address         TEXT DEFAULT '',
   domain          TEXT DEFAULT '',
+  logo_url        TEXT DEFAULT '',
   subscription    TEXT NOT NULL DEFAULT 'Pro',
   manager_user_id TEXT UNIQUE NOT NULL,
   manager_password TEXT NOT NULL,
@@ -35,6 +37,8 @@ CREATE TABLE IF NOT EXISTS public.restaurants (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at      TIMESTAMPTZ
 );
+ALTER TABLE public.restaurants ADD COLUMN IF NOT EXISTS email TEXT DEFAULT '';
+ALTER TABLE public.restaurants ADD COLUMN IF NOT EXISTS logo_url TEXT DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_restaurants_manager ON public.restaurants(manager_user_id);
 CREATE INDEX IF NOT EXISTS idx_restaurants_chef    ON public.restaurants(chef_user_id);
 
