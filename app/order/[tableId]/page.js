@@ -159,6 +159,11 @@ export default function CustomerOrder() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Chat failed');
+
+      const assistantText = String(data.reply || '').trim();
+      if (assistantText) {
+        setMessages(m => [...m, { role: 'assistant', text: assistantText }]);
+      }
       
       let nextCart = cart;
       if (data.actions?.add_items?.length) {
@@ -174,9 +179,6 @@ export default function CustomerOrder() {
         if (stage === 'browsing') await placeOrder(nextCart);
         else if (stage === 'ordered' || stage === 'served') await addOnsAfterOrder(nextCart);
       } else {
-        // Just standard reply
-        setMessages(m => [...m, { role: 'assistant', text: data.reply }]);
-        
         // Show cart summary if items were added but not placed
         if (data.actions?.add_items?.length && stage === 'browsing') {
           const total = nextCart.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);

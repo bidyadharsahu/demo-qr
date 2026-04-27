@@ -37,6 +37,7 @@ const DEMO_MODE_ENABLED = String(process.env.NETRIK_DEMO_MODE || process.env.DEM
 const nowIso = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 const escapeRegExp = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const normalizeImage = (image) => String(image || '').trim();
 
 async function readJsonSafe(request) {
   try {
@@ -170,8 +171,20 @@ function getDemoDb() {
 function buildDemoChatReply({ message = '', language = 'en', restaurantName = 'our restaurant', menu = [] }) {
   const lower = message.toLowerCase();
   const name = restaurantName || 'our restaurant';
-  const menuNames = menu.slice(0, 3).map((m) => m.name).filter(Boolean);
-  const popular = menuNames.length ? menuNames.join(', ') : 'today\'s chef specials';
+  const popularItems = menu.slice(0, 3).map((m) => m.name).filter(Boolean);
+  const popular = popularItems.length ? popularItems.join(', ') : 'today\'s chef specials';
+  const menuPreview = menu.slice(0, 6).map((m) => `${m.name} ($${Number(m.price || 0).toFixed(2)})`).join(', ');
+
+  if (/menu|show.*dish|what.*have|available/.test(lower)) {
+    if (language === 'es') {
+      return menuPreview
+        ? `Claro. En este momento tenemos: ${menuPreview}. Dime cuál quieres y lo agrego por ti.`
+        : 'Ahora mismo no tengo el menu cargado. Intentalo de nuevo en unos segundos y te ayudo a pedir.';
+    }
+    return menuPreview
+      ? `Sure. Right now we have: ${menuPreview}. Tell me what you want and I will add it for you.`
+      : 'I do not have the menu loaded yet. Please try again in a few seconds and I will help you order.';
+  }
 
   if (/recommend|suggest|special|popular|best/.test(lower)) {
     return language === 'es'
@@ -185,9 +198,21 @@ function buildDemoChatReply({ message = '', language = 'en', restaurantName = 'o
       : `Hi, welcome to ${name}. Tell me what you are craving and I will help you order quickly.`;
   }
 
+  if (/place.*order|checkout|confirm.*order|submit.*order/.test(lower)) {
+    return language === 'es'
+      ? 'Perfecto, estoy confirmando tu pedido ahora mismo. Enseguida te comparto el ticket de cocina.'
+      : 'Perfect, I am confirming your order now. I will share your kitchen ticket right away.';
+  }
+
+  if (/pay|payment|bill|check/.test(lower)) {
+    return language === 'es'
+      ? 'Excelente, te ayudo con el pago en linea ahora mismo.'
+      : 'Great, I will help you complete the online payment now.';
+  }
+
   return language === 'es'
-    ? `Perfecto. Puedo ayudarte a agregar platos, bebidas o postres. Si quieres, te sugiero una combinacion equilibrada.`
-    : `Great choice. I can add mains, drinks, or desserts for you. If you want, I can suggest a balanced combo.`;
+    ? 'Perfecto. Puedo ayudarte a agregar platos, bebidas o postres. Dime qué quieres y yo me encargo del pedido.'
+    : 'Great choice. I can add mains, drinks, or desserts for you. Tell me what you want and I will handle the order.';
 }
 
 function extractDemoChatActions(message = '', menu = []) {
@@ -346,7 +371,7 @@ async function handleDemoRequest(path, method, request) {
       description: body.description || '',
       price: parseFloat(body.price) || 0,
       category: body.category || 'Mains',
-      image: body.image || getRandomFoodImage(),
+      image: normalizeImage(body.image) || getRandomFoodImage(),
       available: body.available !== false,
       created_at: nowIso(),
     };
@@ -367,7 +392,7 @@ async function handleDemoRequest(path, method, request) {
       if (body.description !== undefined) row.description = body.description;
       if (body.price !== undefined) row.price = parseFloat(body.price);
       if (body.category !== undefined) row.category = body.category;
-      if (body.image !== undefined) row.image = body.image;
+      if (body.image !== undefined) row.image = normalizeImage(body.image) || getRandomFoodImage();
       if (body.available !== undefined) row.available = body.available;
       if (body.nameEs !== undefined) row.name_es = body.nameEs;
       return json({ ok: true });
@@ -796,7 +821,7 @@ async function handler(request, { params }) {
         description: body.description || '',
         price: parseFloat(body.price) || 0,
         category: body.category || 'Mains',
-        image: body.image || getRandomFoodImage(),
+        image: normalizeImage(body.image) || getRandomFoodImage(),
         available: body.available !== false,
       };
       const { data, error } = await sb.from('menu').insert(row).select('*').single();
@@ -813,7 +838,7 @@ async function handler(request, { params }) {
         if (body.description !== undefined) upd.description = body.description;
         if (body.price !== undefined) upd.price = parseFloat(body.price);
         if (body.category !== undefined) upd.category = body.category;
-        if (body.image !== undefined) upd.image = body.image;
+        if (body.image !== undefined) upd.image = normalizeImage(body.image) || getRandomFoodImage();
         if (body.available !== undefined) upd.available = body.available;
         if (body.nameEs !== undefined) upd.name_es = body.nameEs;
         const { error } = await sb.from('menu').update(upd).eq('id', id);
@@ -1051,7 +1076,7 @@ async function handler(request, { params }) {
     // ============ AI WAITER CHAT ============
     if (path === 'chat' && method === 'POST') {
       const body = await request.json();
-      const { sessionId, restaurantId, tableId, language = 'en', message, menu = [], cart = [], stage = 'browsing' } = body;
+      const { sessionId, restaurantId, tableId, language = 'en', message = '', menu = [], cart = [], stage = 'browsing' } = body;
       const { data: restaurant } = await sb.from('restaurants').select('name').eq('id', restaurantId).maybeSingle();
       const { data: session } = await sb.from('chat_sessions').select('*').eq('session_id', sessionId).maybeSingle();
       const history = (session?.history || []);
@@ -1079,10 +1104,20 @@ ORDER STAGE: ${stage}
       ];
       let raw;
       try {
-        raw = await llmChat({ messages, model: 'llama-3.3-70b-versatile', temperature: 0.8 });
+        raw = await llmChat({ messages, temperature: 0.8 });
       } catch (e) {
         console.error('LLM err', e);
-        return json({ reply: language === 'es' ? 'Disculpe, tuve un problema. ¿Podría repetir?' : 'Sorry, I had a hiccup. Could you repeat that?', actions: null });
+        const fallbackReply = buildDemoChatReply({ message, language, restaurantName: restaurant?.name, menu });
+        const fallbackActions = extractDemoChatActions(message, menu);
+        const fallbackHistory = [...history, { role: 'user', content: message }, { role: 'assistant', content: fallbackReply }].slice(-30);
+        await sb.from('chat_sessions').upsert({
+          session_id: sessionId,
+          restaurant_id: restaurantId,
+          table_id: tableId,
+          history: fallbackHistory,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'session_id' });
+        return json({ reply: fallbackReply, actions: fallbackActions, fallback: true });
       }
       const { reply, actions } = stripJson(raw);
       const newHistory = [...history, { role: 'user', content: message }, { role: 'assistant', content: raw }].slice(-30);

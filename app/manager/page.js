@@ -13,12 +13,20 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { LogOut, BarChart3, ClipboardList, UtensilsCrossed, Table2, ChefHat, Plus, Trash2, Pencil, Printer, QrCode, DollarSign, TrendingUp, Download, Clock, CheckCircle2, Mail, MessageCircle, MessageSquare } from 'lucide-react';
+import { LogOut, BarChart3, ClipboardList, UtensilsCrossed, Table2, ChefHat, Plus, Trash2, Pencil, Printer, QrCode, DollarSign, TrendingUp, Download, Clock, CheckCircle2, Mail, MessageCircle, MessageSquare, Upload, Shuffle } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { NetrikLogo } from '@/components/netrik-logo';
 
 const CATEGORIES = ['Starters', 'Mains', 'Desserts', 'Drinks', 'Specials'];
 const FOOD_IMG = 'https://images.pexels.com/photos/35420084/pexels-photo-35420084.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940';
+const RANDOM_MENU_IMAGES = [
+  'https://images.unsplash.com/photo-1544025162-811114bd020f?auto=format&fit=crop&w=1000&q=80',
+  'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=1000&q=80',
+  'https://images.unsplash.com/photo-1493770348161-369560ae357d?auto=format&fit=crop&w=1000&q=80',
+  'https://images.unsplash.com/photo-1473093295043-cdd812d0e601?auto=format&fit=crop&w=1000&q=80',
+  'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=1000&q=80',
+  'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1000&q=80',
+];
 
 export default function ManagerDashboard() {
   const router = useRouter();
@@ -47,6 +55,37 @@ export default function ManagerDashboard() {
   const [supportOpen, setSupportOpen] = useState(false);
   const [supportMessages, setSupportMessages] = useState([]);
   const [supportText, setSupportText] = useState('');
+
+  const getRandomImage = () => RANDOM_MENU_IMAGES[Math.floor(Math.random() * RANDOM_MENU_IMAGES.length)];
+
+  const applyMenuImageFile = (file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setItemForm((prev) => ({ ...prev, image: String(reader.result || '') }));
+      toast.success('Image attached');
+    };
+    reader.onerror = () => toast.error('Failed to read image');
+    reader.readAsDataURL(file);
+  };
+
+  const onMenuImageUpload = (e) => {
+    const file = e.target.files?.[0];
+    applyMenuImageFile(file);
+  };
+
+  const onMenuImagePaste = async (e) => {
+    const items = Array.from(e.clipboardData?.items || []);
+    const imageItem = items.find((item) => item.type.startsWith('image/'));
+    if (!imageItem) return;
+    e.preventDefault();
+    const file = imageItem.getAsFile();
+    applyMenuImageFile(file);
+  };
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('netrik_user') || 'null');
@@ -463,7 +502,28 @@ export default function ManagerDashboard() {
                         </Select>
                       </div>
                     </div>
-                    <div><Label>Image URL</Label><Input value={itemForm.image} onChange={e=>setItemForm({...itemForm,image:e.target.value})} className="bg-white/5 border-white/10"/></div>
+                    <div>
+                      <Label>Image URL</Label>
+                      <Input
+                        value={itemForm.image}
+                        onChange={e=>setItemForm({...itemForm,image:e.target.value})}
+                        onPaste={onMenuImagePaste}
+                        placeholder="Paste URL or press Ctrl+V after copying image"
+                        className="bg-white/5 border-white/10"
+                      />
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <label className="inline-flex h-9 cursor-pointer items-center rounded-md border border-white/20 bg-white/5 px-3 text-xs text-white/80 hover:bg-white/10">
+                          <Upload className="h-3.5 w-3.5 mr-1.5"/>Upload from PC
+                          <input type="file" accept="image/*" className="hidden" onChange={onMenuImageUpload}/>
+                        </label>
+                        <Button type="button" size="sm" variant="outline" className="h-9 border-white/20 bg-white/5 hover:bg-white/10 text-white" onClick={() => setItemForm((prev) => ({ ...prev, image: getRandomImage() }))}><Shuffle className="h-3.5 w-3.5 mr-1.5"/>Random photo</Button>
+                      </div>
+                    </div>
+                    {itemForm.image && (
+                      <div className="rounded-md border border-white/10 p-2 bg-black/30">
+                        <img src={itemForm.image} alt="Preview" className="h-28 w-full rounded-md object-cover"/>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between rounded-lg border border-white/10 p-3"><div><div className="text-sm font-medium">Available</div><div className="text-xs text-white/50">Show on customer menu</div></div><Switch checked={itemForm.available} onCheckedChange={v=>setItemForm({...itemForm,available:v})}/></div>
                   </div>
                   <DialogFooter><Button onClick={saveItem} className="bg-amber-400 text-black hover:bg-amber-300">{editingItem ? 'Save' : 'Add'}</Button></DialogFooter>

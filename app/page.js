@@ -58,16 +58,16 @@ export default function Home() {
         </div>
         <div className="mt-14 grid md:grid-cols-3 gap-6">
           {[
-            { t: 'AI Waiter Bot', d: 'Customers scan a QR, chat with an AI that takes orders, suggests dishes, handles allergies & spice levels — bilingual.', img: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80' },
-            { t: 'QR Table Ordering', d: 'Generate printable QR codes per table. Status updates live to Available / Occupied / Paid.', img: 'https://images.unsplash.com/photo-1621252179027-94459d278660?auto=format&fit=crop&w=800&q=80' },
-            { t: 'Kitchen Tickets', d: 'Real-time bilingual (EN/ES) tickets streamed to chef screens or printers.', img: 'https://images.unsplash.com/photo-1577219491135-ce391730fb2c?auto=format&fit=crop&w=800&q=80' },
-            { t: 'Live Analytics', d: 'Beautiful dashboards: revenue trends, top-selling items, table turnover, downloadable CSV.', img: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80' },
-            { t: 'Smart Menu', d: 'Add dishes with photos, mark availability instantly, customers see updates in real time.', img: 'https://images.unsplash.com/photo-1414235077428-33898869228e?auto=format&fit=crop&w=800&q=80' },
-            { t: 'Multi-tenant', d: 'One central admin, unlimited restaurants. Each gets a branded panel — “X Restaurant by Netrik Shop”.', img: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80' },
+            { t: 'AI Waiter Bot', d: 'Customers scan a QR, chat with an AI that takes orders, suggests dishes, handles allergies & spice levels — bilingual.', img: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80', imgClass: '' },
+            { t: 'QR Table Ordering', d: 'Generate printable QR codes per table. Status updates live to Available / Occupied / Paid.', img: 'https://images.unsplash.com/photo-1621252179027-94459d278660?auto=format&fit=crop&w=800&q=80', imgClass: '' },
+            { t: 'Kitchen Tickets', d: 'Real-time bilingual (EN/ES) tickets streamed to chef screens or printers.', img: 'https://images.unsplash.com/photo-1577219491135-ce391730fb2c?auto=format&fit=crop&w=800&q=80', imgClass: '' },
+            { t: 'Live Analytics', d: 'Beautiful dashboards: revenue trends, top-selling items, table turnover, downloadable CSV.', img: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80', imgClass: '' },
+            { t: 'Smart Menu', d: 'Add dishes with photos, mark availability instantly, customers see updates in real time.', img: 'https://images.unsplash.com/photo-1556740749-887f6717d7e4?auto=format&fit=crop&w=1000&q=85', imgClass: 'brightness-110 object-[center_35%]' },
+            { t: 'Multi-tenant', d: 'One central admin, unlimited restaurants. Each gets a branded panel — “X Restaurant by Netrik Shop”.', img: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80', imgClass: '' },
           ].map((f) => (
             <Card key={f.t} className="bg-white/5 border-white/10 overflow-hidden group hover:bg-white/[0.07] transition-colors">
               <div className="h-40 overflow-hidden">
-                <img src={f.img} alt={f.t} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"/>
+                <img src={f.img} alt={f.t} className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ${f.imgClass || ''}`}/>
               </div>
               <CardContent className="p-6">
                 <div className="text-lg font-semibold text-white">{f.t}</div>
