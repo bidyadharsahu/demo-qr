@@ -74,13 +74,13 @@ export default function LoginPage() {
                 <TabsTrigger value="central" className="h-full rounded-md text-white/70 data-[state=active]:bg-amber-400 data-[state=active]:text-black">Central Login</TabsTrigger>
               </TabsList>
               {tab === 'staff' && (
-                <div className="mt-3 grid grid-cols-2 gap-3 mb-4">
-                  <button type="button" onClick={() => setStaffRole('manager')} className={`min-h-[92px] rounded-xl border p-3 text-left transition ${staffRole === 'manager' ? 'border-amber-400 bg-amber-400/10' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}>
+                <div className="mt-4 mb-5 grid grid-cols-2 gap-4">
+                  <button type="button" onClick={() => setStaffRole('manager')} className={`min-h-[98px] rounded-xl border p-4 text-left transition ${staffRole === 'manager' ? 'border-amber-400 bg-amber-400/10' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}>
                     <UserCog className="h-5 w-5 mb-1 text-amber-300"/>
                     <div className="font-semibold">Manager</div>
                     <div className="text-xs text-white/50">Restaurant admin</div>
                   </button>
-                  <button type="button" onClick={() => setStaffRole('chef')} className={`min-h-[92px] rounded-xl border p-3 text-left transition ${staffRole === 'chef' ? 'border-amber-400 bg-amber-400/10' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}>
+                  <button type="button" onClick={() => setStaffRole('chef')} className={`min-h-[98px] rounded-xl border p-4 text-left transition ${staffRole === 'chef' ? 'border-amber-400 bg-amber-400/10' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}>
                     <ChefHat className="h-5 w-5 mb-1 text-amber-300"/>
                     <div className="font-semibold">Chef</div>
                     <div className="text-xs text-white/50">Kitchen view</div>

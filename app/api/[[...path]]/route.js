@@ -23,6 +23,7 @@ function stripJson(text) {
 
 const DEMO_MENU_IMAGE = 'https://images.pexels.com/photos/35420084/pexels-photo-35420084.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940';
 const DEMO_DB_KEY = '_netrik_demo_db';
+const DEMO_MODE_ENABLED = String(process.env.NETRIK_DEMO_MODE || process.env.DEMO_MODE || '').toLowerCase() === 'true';
 
 const nowIso = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
@@ -649,11 +650,15 @@ async function handler(request, { params }) {
   const path = (params?.path || []).join('/');
   const method = request.method;
   let sb;
+  let sbError = null;
   try { sb = getSupabase(); }
-  catch (e) { sb = null; }
+  catch (e) { sb = null; sbError = e; }
 
   if (!sb) {
-    return handleDemoRequest(path, method, request);
+    if (DEMO_MODE_ENABLED) {
+      return handleDemoRequest(path, method, request);
+    }
+    return err(`Database not configured: ${sbError?.message || 'unknown error'}`, 500);
   }
 
   try {
