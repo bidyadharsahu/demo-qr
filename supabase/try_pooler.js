@@ -1,9 +1,13 @@
 const { Client } = require('pg');
-const PASS = 'Namasterides@1';
-const REF = 'plbeqmlfhoflsmwtlszd';
+const PASS = process.env.SUPABASE_DB_PASSWORD || '';
+const REF = process.env.SUPABASE_PROJECT_REF || '';
 const regions = ['ap-south-1','ap-southeast-1','us-east-1','us-east-2','us-west-1','eu-west-1','eu-central-1','ap-northeast-1','ap-southeast-2'];
 const prefixes = ['aws-0','aws-1'];
 (async () => {
+  if (!PASS || !REF) {
+    console.error('Set SUPABASE_DB_PASSWORD and SUPABASE_PROJECT_REF before running this script.');
+    process.exit(1);
+  }
   for (const p of prefixes) {
     for (const r of regions) {
       const host = `${p}-${r}.pooler.supabase.com`;
