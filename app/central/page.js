@@ -55,7 +55,10 @@ export default function CentralAdmin() {
         channel = sb.channel('central-realtime')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => refresh(true))
           .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurants' }, () => refresh(true))
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'support_messages' }, () => refresh(true))
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages' }, (payload) => {
+            setSupportMessages(prev => [...prev, payload.new].sort((a,b) => new Date(a.created_at) - new Date(b.created_at)));
+          })
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'support_messages' }, () => refresh(true))
           .subscribe();
       }
     });

@@ -66,8 +66,11 @@ export default function ManagerDashboard() {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'rest_tables', filter: `restaurant_id=eq.${u.restaurantId}` }, () => {
               loadAll(u, true);
             })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'support_messages', filter: `restaurant_id=eq.${u.restaurantId}` }, () => {
-              loadAll(u, true);
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages', filter: `restaurant_id=eq.${u.restaurantId}` }, (payload) => {
+              setSupportMessages(prev => [...prev, payload.new].sort((a,b) => new Date(a.created_at) - new Date(b.created_at)));
+            })
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'support_messages', filter: `restaurant_id=eq.${u.restaurantId}` }, () => {
+              loadAll(u, true); // if message updated/read status changed
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'menu', filter: `restaurant_id=eq.${u.restaurantId}` }, () => {
               loadAll(u, true);
