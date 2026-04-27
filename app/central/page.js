@@ -153,6 +153,10 @@ export default function CentralAdmin() {
       toast.error('Please select an image file');
       return;
     }
+    if (file.size > 1024 * 1024) {
+      toast.error('Logo file size must be less than 1MB');
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       setForm((previous) => ({ ...previous, logoUrl: String(reader.result || '') }));
@@ -235,8 +239,55 @@ export default function CentralAdmin() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Badge className="bg-amber-400 text-black"><ShieldCheck className="h-3 w-3 mr-1"/> {me.userId}</Badge>
-            <Button variant="ghost" className="text-white/70 hover:text-white" onClick={() => { localStorage.removeItem('netrik_user'); router.push('/login'); }}><LogOut className="h-4 w-4 mr-2"/>Logout</Button>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="h-9 border-white/20 bg-white/5 hover:bg-white/10 hover:text-white text-white/80 relative">
+                  <MessageSquare className="h-4 w-4 mr-2"/> Inbox
+                  {supportMessages.filter(m => m.sender === 'restaurant' && !m.read).length > 0 && (
+                    <span className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white border-2 border-black">
+                      {supportMessages.filter(m => m.sender === 'restaurant' && !m.read).length}
+                    </span>
+                  )}
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="bg-[#111] border-white/10 text-white max-w-2xl h-[600px] flex flex-col p-0">
+                <DialogHeader className="p-4 border-b border-white/10 shrink-0"><DialogTitle>Support Inbox</DialogTitle></DialogHeader>
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {supportMessages.length === 0 && <div className="text-center text-white/40 mt-10">No support messages yet.</div>}
+                  {supportMessages.map(m => {
+                    const r = list.find(x => x.id === m.restaurant_id);
+                    return (
+                      <div key={m.id} className={`flex flex-col ${m.sender === 'central' ? 'items-end' : 'items-start'}`}>
+                        {m.sender === 'restaurant' && <div className="text-xs text-white/40 mb-1 ml-1">{r?.name || 'Unknown Restaurant'}</div>}
+                        <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${m.sender === 'central' ? 'bg-[#635BFF] text-white rounded-br-sm' : 'bg-white/10 text-white rounded-bl-sm'}`}>
+                          {m.message}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] text-white/30">{new Date(m.created_at).toLocaleString()}</span>
+                          {m.sender === 'restaurant' && (
+                            <button onClick={() => setReplyOpen(r)} className="text-[10px] text-amber-400 hover:underline">Reply</button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {replyOpen && (
+                  <div className="p-4 border-t border-white/10 shrink-0 bg-black/50">
+                    <div className="text-xs text-amber-300 mb-2 flex justify-between items-center">
+                      <span>Replying to {replyOpen.name}</span>
+                      <button onClick={() => setReplyOpen(null)} className="text-white/50 hover:text-white">Cancel</button>
+                    </div>
+                    <div className="flex gap-2">
+                      <Input value={replyText} onChange={e=>setReplyText(e.target.value)} placeholder="Type a reply..." className="bg-white/5 border-white/10" onKeyDown={e => e.key === 'Enter' && sendSupportReply()}/>
+                      <Button onClick={sendSupportReply} className="bg-amber-400 text-black hover:bg-amber-300">Send</Button>
+                    </div>
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
+            <Badge className="bg-amber-400 text-black h-9 px-3 rounded-md"><ShieldCheck className="h-4 w-4 mr-2"/> {me.userId}</Badge>
+            <Button variant="ghost" className="h-9 hover:bg-white/10 hover:text-white text-white/70" onClick={() => { localStorage.removeItem('netrik_user'); router.push('/login'); }}><LogOut className="h-4 w-4 mr-2"/>Logout</Button>
           </div>
         </div>
       </header>
@@ -340,10 +391,17 @@ export default function CentralAdmin() {
                         <div className="col-span-2"><Label>Logo URL</Label><Input value={form.logoUrl} onChange={(e)=>setForm({...form,logoUrl:e.target.value})} placeholder="https://..." className="bg-white/5 border-white/10"/></div>
                         <div>
                           <Label>Upload logo</Label>
-                          <label className="mt-1.5 flex h-10 items-center justify-center rounded-md border border-white/10 bg-white/5 text-sm cursor-pointer hover:bg-white/10">
-                            <Upload className="h-4 w-4 mr-1"/>Upload
-                            <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload}/>
-                          </label>
+                          {form.logoUrl && form.logoUrl.startsWith('data:') ? (
+                            <div className="mt-1.5 flex items-center gap-2">
+                              <img src={form.logoUrl} alt="Logo preview" className="h-10 w-10 object-cover rounded border border-white/10"/>
+                              <Button variant="ghost" size="sm" onClick={() => setForm({...form, logoUrl:''})} className="text-rose-400 hover:text-rose-300 hover:bg-rose-400/10 h-10 px-2"><Trash2 className="h-4 w-4"/></Button>
+                            </div>
+                          ) : (
+                            <label className="mt-1.5 flex h-10 items-center justify-center rounded-md border border-white/10 bg-white/5 text-sm cursor-pointer hover:bg-white/10 text-white/70">
+                              <Upload className="h-4 w-4 mr-1"/>Upload
+                              <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload}/>
+                            </label>
+                          )}
                         </div>
                       </div>
                       {form.logoUrl && (
@@ -461,54 +519,6 @@ export default function CentralAdmin() {
         </Dialog>
       </main>
 
-      {/* Support Inbox Floating Widget */}
-      <Dialog>
-        <DialogTrigger asChild>
-          <Button className="fixed bottom-6 right-6 rounded-full h-14 w-14 bg-[#635BFF] hover:bg-[#524be0] text-white shadow-xl shadow-[#635BFF]/30">
-            <MessageSquare className="h-6 w-6"/>
-            {supportMessages.filter(m => m.sender === 'restaurant' && !m.read).length > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold">
-                {supportMessages.filter(m => m.sender === 'restaurant' && !m.read).length}
-              </span>
-            )}
-          </Button>
-        </DialogTrigger>
-        <DialogContent className="bg-[#111] border-white/10 text-white max-w-2xl h-[600px] flex flex-col p-0">
-          <DialogHeader className="p-4 border-b border-white/10 shrink-0"><DialogTitle>Support Inbox</DialogTitle></DialogHeader>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {supportMessages.length === 0 && <div className="text-center text-white/40 mt-10">No support messages yet.</div>}
-            {supportMessages.map(m => {
-              const r = list.find(x => x.id === m.restaurant_id);
-              return (
-                <div key={m.id} className={`flex flex-col ${m.sender === 'central' ? 'items-end' : 'items-start'}`}>
-                  {m.sender === 'restaurant' && <div className="text-xs text-white/40 mb-1 ml-1">{r?.name || 'Unknown Restaurant'}</div>}
-                  <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${m.sender === 'central' ? 'bg-[#635BFF] text-white rounded-br-sm' : 'bg-white/10 text-white rounded-bl-sm'}`}>
-                    {m.message}
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-[10px] text-white/30">{new Date(m.created_at).toLocaleString()}</span>
-                    {m.sender === 'restaurant' && (
-                      <button onClick={() => setReplyOpen(r)} className="text-[10px] text-amber-400 hover:underline">Reply</button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {replyOpen && (
-            <div className="p-4 border-t border-white/10 shrink-0 bg-black/50">
-              <div className="text-xs text-amber-300 mb-2 flex justify-between items-center">
-                <span>Replying to {replyOpen.name}</span>
-                <button onClick={() => setReplyOpen(null)} className="text-white/50 hover:text-white">Cancel</button>
-              </div>
-              <div className="flex gap-2">
-                <Input value={replyText} onChange={e=>setReplyText(e.target.value)} placeholder="Type a reply..." className="bg-white/5 border-white/10" onKeyDown={e => e.key === 'Enter' && sendSupportReply()}/>
-                <Button onClick={sendSupportReply} className="bg-amber-400 text-black hover:bg-amber-300">Send</Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

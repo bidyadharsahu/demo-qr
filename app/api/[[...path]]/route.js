@@ -273,8 +273,8 @@ async function handleDemoRequest(path, method, request) {
     };
     db.restaurants.push(row);
     const restaurant = restaurantToApi(row);
-    const mail = await sendRestaurantOnboardingEmail(onboardingPayload(restaurant));
-    return json({ restaurant, mail });
+    sendRestaurantOnboardingEmail(onboardingPayload(restaurant)).catch(e => console.error('SMTP Background Error:', e));
+    return json({ restaurant, mailStatus: 'sent_to_background' });
   }
 
   const restMatch = path.match(/^restaurants\/([^\/]+)$/);
@@ -730,8 +730,8 @@ async function handler(request, { params }) {
       const { data, error } = await sb.from('restaurants').insert(row).select('*').single();
       if (error) return err(error.message, 500);
       const restaurant = restaurantToApi(data);
-      const mail = await sendRestaurantOnboardingEmail(onboardingPayload(restaurant));
-      return json({ restaurant, mail });
+      sendRestaurantOnboardingEmail(onboardingPayload(restaurant)).catch(e => console.error('SMTP Background Error:', e));
+      return json({ restaurant, mailStatus: 'sent_to_background' });
     }
     const restMatch = path.match(/^restaurants\/([^\/]+)$/);
     if (restMatch) {
