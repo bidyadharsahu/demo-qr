@@ -39,6 +39,62 @@ const makeId = (prefix) => `${prefix}_${Math.random().toString(36).slice(2, 10)}
 const escapeRegExp = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const normalizeImage = (image) => String(image || '').trim();
 
+const DEMO_UPI_PAYEE = 'Netrik Shop';
+const DEMO_UPI_VPA = 'netrik@upi';
+const DEMO_UPI_AUTO_SETTLE_MS = 9000;
+
+const toAmount = (value) => Number.parseFloat(value || 0).toFixed(2);
+const makeUpiReference = () => `UPI${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+const buildUpiUri = ({ vpa, name, amount, reference }) => {
+  const params = new URLSearchParams({
+    pa: vpa,
+    pn: name,
+    am: amount,
+    cu: 'INR',
+    tn: reference,
+  });
+  return `upi://pay?${params.toString()}`;
+};
+
+const buildUpiPayment = (row) => ({
+  reference: row.payment_reference || '',
+  vpa: row.payment_vpa || DEMO_UPI_VPA,
+  payee: DEMO_UPI_PAYEE,
+  amount: toAmount(row.total),
+  status: row.payment_status || (row.status === 'paid' ? 'paid' : 'unpaid'),
+  upiUri: row.payment_qr || '',
+  createdAt: row.payment_created_at || null,
+});
+
+const ensureDemoUpiPayment = (row) => {
+  if (!row.payment_reference) row.payment_reference = makeUpiReference();
+  if (!row.payment_vpa) row.payment_vpa = DEMO_UPI_VPA;
+  if (!row.payment_provider) row.payment_provider = 'demo-upi';
+  if (!row.payment_method) row.payment_method = 'upi';
+  if (!row.payment_created_at) row.payment_created_at = nowIso();
+  if (!row.payment_qr) {
+    row.payment_qr = buildUpiUri({
+      vpa: row.payment_vpa,
+      name: DEMO_UPI_PAYEE,
+      amount: toAmount(row.total),
+      reference: row.payment_reference,
+    });
+  }
+  if (row.status === 'paid') row.payment_status = 'paid';
+  else if (!row.payment_status || row.payment_status === 'unpaid') row.payment_status = 'pending';
+};
+
+const maybeAutoSettleDemoUpi = (row) => {
+  if (row.payment_status !== 'pending') return false;
+  const started = new Date(row.payment_created_at || row.created_at || nowIso()).getTime();
+  if (Date.now() - started < DEMO_UPI_AUTO_SETTLE_MS) return false;
+  row.payment_status = 'paid';
+  row.status = 'paid';
+  row.paid_at = nowIso();
+  row.updated_at = nowIso();
+  return true;
+};
+
 async function readJsonSafe(request) {
   try {
     return await request.json();
@@ -119,6 +175,7 @@ function getDemoDb() {
         price: 18.5,
         category: 'Mains',
         image: DEMO_MENU_IMAGE,
+        video_url: 'https://videos.pexels.com/video-files/3255275/3255275-hd_1920_1080_30fps.mp4',
         available: true,
         created_at: createdAt,
       },
@@ -131,6 +188,7 @@ function getDemoDb() {
         price: 14,
         category: 'Starters',
         image: DEMO_MENU_IMAGE,
+        video_url: 'https://videos.pexels.com/video-files/2620043/2620043-hd_1920_1080_30fps.mp4',
         available: true,
         created_at: createdAt,
       },
@@ -143,6 +201,7 @@ function getDemoDb() {
         price: 9,
         category: 'Desserts',
         image: DEMO_MENU_IMAGE,
+        video_url: '',
         available: true,
         created_at: createdAt,
       },
@@ -155,6 +214,7 @@ function getDemoDb() {
         price: 6,
         category: 'Drinks',
         image: DEMO_MENU_IMAGE,
+        video_url: '',
         available: true,
         created_at: createdAt,
       },
@@ -178,11 +238,11 @@ function buildDemoChatReply({ message = '', language = 'en', restaurantName = 'o
   if (/menu|show.*dish|what.*have|available/.test(lower)) {
     if (language === 'es') {
       return menuPreview
-        ? `Claro. En este momento tenemos: ${menuPreview}. Dime cuál quieres y lo agrego por ti.`
+        ? `Claro. En este momento tenemos: ${menuPreview}. También puedo mostrar el menu visual con fotos y videos. Dime cuál quieres y lo agrego por ti.`
         : 'Ahora mismo no tengo el menu cargado. Intentalo de nuevo en unos segundos y te ayudo a pedir.';
     }
     return menuPreview
-      ? `Sure. Right now we have: ${menuPreview}. Tell me what you want and I will add it for you.`
+      ? `Sure. Right now we have: ${menuPreview}. I can also show the visual menu with photos and videos. Tell me what you want and I will add it for you.`
       : 'I do not have the menu loaded yet. Please try again in a few seconds and I will help you order.';
   }
 
@@ -372,6 +432,7 @@ async function handleDemoRequest(path, method, request) {
       price: parseFloat(body.price) || 0,
       category: body.category || 'Mains',
       image: normalizeImage(body.image) || getRandomFoodImage(),
+      video_url: String(body.videoUrl || '').trim(),
       available: body.available !== false,
       created_at: nowIso(),
     };
@@ -393,6 +454,7 @@ async function handleDemoRequest(path, method, request) {
       if (body.price !== undefined) row.price = parseFloat(body.price);
       if (body.category !== undefined) row.category = body.category;
       if (body.image !== undefined) row.image = normalizeImage(body.image) || getRandomFoodImage();
+      if (body.videoUrl !== undefined) row.video_url = String(body.videoUrl || '').trim();
       if (body.available !== undefined) row.available = body.available;
       if (body.nameEs !== undefined) row.name_es = body.nameEs;
       return json({ ok: true });
@@ -490,6 +552,13 @@ async function handleDemoRequest(path, method, request) {
       allergy: body.allergy || '',
       spicy_level: body.spicyLevel || '',
       paid_at: null,
+      payment_status: 'unpaid',
+      payment_reference: '',
+      payment_provider: '',
+      payment_method: '',
+      payment_vpa: '',
+      payment_qr: '',
+      payment_created_at: null,
       created_at: ts,
       updated_at: ts,
     };
@@ -514,6 +583,11 @@ async function handleDemoRequest(path, method, request) {
       if (body.status) row.status = body.status;
       row.updated_at = nowIso();
       if (body.status === 'paid') {
+        row.payment_status = 'paid';
+        row.payment_reference = row.payment_reference || makeUpiReference();
+        row.payment_provider = row.payment_provider || 'manual';
+        row.payment_method = row.payment_method || 'cash';
+        row.paid_at = row.paid_at || nowIso();
         const table = db.rest_tables.find((t) => t.id === row.table_id);
         if (table) table.status = 'available';
       }
@@ -555,12 +629,39 @@ async function handleDemoRequest(path, method, request) {
     const { orderId } = await request.json();
     const row = db.orders.find((o) => o.id === orderId);
     if (!row) return err('Order not found', 404);
+    if (!row.payment_reference) row.payment_reference = makeUpiReference();
+    row.payment_provider = row.payment_provider || 'demo';
+    row.payment_method = row.payment_method || 'card';
+    row.payment_status = 'paid';
     row.status = 'paid';
     row.paid_at = nowIso();
     row.updated_at = nowIso();
     const table = db.rest_tables.find((t) => t.id === row.table_id);
     if (table) table.status = 'available';
     return json({ order: orderToApi(row) });
+  }
+
+  // ============ PAYMENT (UPI DEMO) ============
+  if (path === 'payment/upi/init' && method === 'POST') {
+    const { orderId } = await request.json();
+    const row = db.orders.find((o) => o.id === orderId);
+    if (!row) return err('Order not found', 404);
+    ensureDemoUpiPayment(row);
+    return json({ order: orderToApi(row), payment: buildUpiPayment(row) });
+  }
+
+  if (path === 'payment/upi/status' && method === 'GET') {
+    const url = new URL(request.url);
+    const orderId = url.searchParams.get('orderId');
+    const row = db.orders.find((o) => o.id === orderId);
+    if (!row) return err('Order not found', 404);
+    ensureDemoUpiPayment(row);
+    const settled = maybeAutoSettleDemoUpi(row);
+    if (settled) {
+      const table = db.rest_tables.find((t) => t.id === row.table_id);
+      if (table) table.status = 'available';
+    }
+    return json({ order: orderToApi(row), payment: buildUpiPayment(row) });
   }
 
   // ============ FEEDBACK ============
@@ -822,6 +923,7 @@ async function handler(request, { params }) {
         price: parseFloat(body.price) || 0,
         category: body.category || 'Mains',
         image: normalizeImage(body.image) || getRandomFoodImage(),
+        video_url: String(body.videoUrl || '').trim(),
         available: body.available !== false,
       };
       const { data, error } = await sb.from('menu').insert(row).select('*').single();
@@ -839,6 +941,7 @@ async function handler(request, { params }) {
         if (body.price !== undefined) upd.price = parseFloat(body.price);
         if (body.category !== undefined) upd.category = body.category;
         if (body.image !== undefined) upd.image = normalizeImage(body.image) || getRandomFoodImage();
+        if (body.videoUrl !== undefined) upd.video_url = String(body.videoUrl || '').trim();
         if (body.available !== undefined) upd.available = body.available;
         if (body.nameEs !== undefined) upd.name_es = body.nameEs;
         const { error } = await sb.from('menu').update(upd).eq('id', id);
@@ -922,6 +1025,13 @@ async function handler(request, { params }) {
         status: 'pending',
         allergy: body.allergy || '',
         spicy_level: body.spicyLevel || '',
+        payment_status: 'unpaid',
+        payment_reference: '',
+        payment_provider: '',
+        payment_method: '',
+        payment_vpa: '',
+        payment_qr: '',
+        payment_created_at: null,
       };
       const { data, error } = await sb.from('orders').insert(row).select('*').single();
       if (error) return err(error.message, 500);
@@ -941,6 +1051,14 @@ async function handler(request, { params }) {
         const body = await request.json();
         const upd = { updated_at: new Date().toISOString() };
         if (body.status) upd.status = body.status;
+        if (body.status === 'paid') {
+          upd.paid_at = new Date().toISOString();
+          upd.payment_status = 'paid';
+          const { data: existing } = await sb.from('orders').select('payment_reference,payment_provider,payment_method').eq('id', id).maybeSingle();
+          upd.payment_reference = existing?.payment_reference || makeUpiReference();
+          upd.payment_provider = existing?.payment_provider || 'manual';
+          upd.payment_method = existing?.payment_method || 'cash';
+        }
         const { error } = await sb.from('orders').update(upd).eq('id', id);
         if (error) return err(error.message, 500);
         if (body.status === 'paid') {
@@ -976,10 +1094,146 @@ async function handler(request, { params }) {
       const { data: o, error: ge } = await sb.from('orders').select('*').eq('id', orderId).maybeSingle();
       if (ge) return err(ge.message, 500);
       if (!o) return err('Order not found', 404);
-      const { data, error } = await sb.from('orders').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', orderId).select('*').single();
+      const paymentReference = o.payment_reference || makeUpiReference();
+      const { data, error } = await sb.from('orders').update({
+        status: 'paid',
+        paid_at: new Date().toISOString(),
+        payment_status: 'paid',
+        payment_reference: paymentReference,
+        payment_provider: o.payment_provider || 'demo',
+        payment_method: o.payment_method || 'card',
+      }).eq('id', orderId).select('*').single();
       if (error) return err(error.message, 500);
       await sb.from('rest_tables').update({ status: 'available' }).eq('id', o.table_id);
       return json({ order: orderToApi(data) });
+    }
+
+    // ============ PAYMENT (UPI DEMO) ============
+    if (path === 'payment/upi/init' && method === 'POST') {
+      const { orderId } = await request.json();
+      const { data: o, error: ge } = await sb.from('orders').select('*').eq('id', orderId).maybeSingle();
+      if (ge) return err(ge.message, 500);
+      if (!o) return err('Order not found', 404);
+
+      const paymentReference = o.payment_reference || makeUpiReference();
+      const vpa = o.payment_vpa || DEMO_UPI_VPA;
+      const paymentCreatedAt = o.payment_created_at || new Date().toISOString();
+      const paymentQr = o.payment_qr || buildUpiUri({
+        vpa,
+        name: DEMO_UPI_PAYEE,
+        amount: toAmount(o.total),
+        reference: paymentReference,
+      });
+      const { data, error } = await sb.from('orders').update({
+        payment_status: o.payment_status && o.payment_status !== 'unpaid' ? o.payment_status : 'pending',
+        payment_reference: paymentReference,
+        payment_provider: o.payment_provider || 'demo-upi',
+        payment_method: o.payment_method || 'upi',
+        payment_vpa: vpa,
+        payment_qr: paymentQr,
+        payment_created_at: paymentCreatedAt,
+      }).eq('id', orderId).select('*').single();
+      if (error) return err(error.message, 500);
+      return json({ order: orderToApi(data), payment: buildUpiPayment(data) });
+    }
+
+    if (path === 'payment/upi/status' && method === 'GET') {
+      const url = new URL(request.url);
+      const orderId = url.searchParams.get('orderId');
+      const { data: o, error: ge } = await sb.from('orders').select('*').eq('id', orderId).maybeSingle();
+      if (ge) return err(ge.message, 500);
+      if (!o) return err('Order not found', 404);
+
+      const row = { ...o };
+      if (!row.payment_reference) row.payment_reference = makeUpiReference();
+      if (!row.payment_vpa) row.payment_vpa = DEMO_UPI_VPA;
+      if (!row.payment_provider) row.payment_provider = 'demo-upi';
+      if (!row.payment_method) row.payment_method = 'upi';
+      if (!row.payment_created_at) row.payment_created_at = new Date().toISOString();
+      if (!row.payment_qr) {
+        row.payment_qr = buildUpiUri({
+          vpa: row.payment_vpa,
+          name: DEMO_UPI_PAYEE,
+          amount: toAmount(row.total),
+          reference: row.payment_reference,
+        });
+      }
+      if (!row.payment_status || row.payment_status === 'unpaid') row.payment_status = 'pending';
+
+      const settled = maybeAutoSettleDemoUpi(row);
+      const { data, error } = await sb.from('orders').update({
+        payment_status: row.payment_status,
+        payment_reference: row.payment_reference,
+        payment_provider: row.payment_provider,
+        payment_method: row.payment_method,
+        payment_vpa: row.payment_vpa,
+        payment_qr: row.payment_qr,
+        payment_created_at: row.payment_created_at,
+        status: row.status,
+        paid_at: row.paid_at,
+        updated_at: row.updated_at || new Date().toISOString(),
+      }).eq('id', orderId).select('*').single();
+      if (error) return err(error.message, 500);
+      if (settled) {
+        await sb.from('rest_tables').update({ status: 'available' }).eq('id', o.table_id);
+      }
+      return json({ order: orderToApi(data), payment: buildUpiPayment(data) });
+    }
+
+    // ============ PAYMENT (UPI DEMO) ============
+    if (path === 'payment/upi/init' && method === 'POST') {
+      const { orderId } = await request.json();
+      const { data: o, error } = await sb.from('orders').select('*').eq('id', orderId).maybeSingle();
+      if (error) return err(error.message, 500);
+      if (!o) return err('Order not found', 404);
+      const updated = {
+        payment_reference: o.payment_reference || makeUpiReference(),
+        payment_provider: o.payment_provider || 'demo-upi',
+        payment_method: o.payment_method || 'upi',
+        payment_vpa: o.payment_vpa || DEMO_UPI_VPA,
+        payment_created_at: o.payment_created_at || new Date().toISOString(),
+        payment_status: o.payment_status && o.payment_status !== 'unpaid' ? o.payment_status : 'pending',
+      };
+      if (!o.payment_qr) {
+        updated.payment_qr = buildUpiUri({
+          vpa: updated.payment_vpa,
+          name: DEMO_UPI_PAYEE,
+          amount: toAmount(o.total),
+          reference: updated.payment_reference,
+        });
+      }
+      const { data, error: ue } = await sb.from('orders').update(updated).eq('id', orderId).select('*').single();
+      if (ue) return err(ue.message, 500);
+      return json({ order: orderToApi(data), payment: buildUpiPayment(data) });
+    }
+
+    if (path === 'payment/upi/status' && method === 'GET') {
+      const url = new URL(request.url);
+      const orderId = url.searchParams.get('orderId');
+      const { data: o, error } = await sb.from('orders').select('*').eq('id', orderId).maybeSingle();
+      if (error) return err(error.message, 500);
+      if (!o) return err('Order not found', 404);
+
+      let updated = null;
+      const createdAt = o.payment_created_at ? new Date(o.payment_created_at).getTime() : 0;
+      if (o.payment_status === 'pending' && createdAt && Date.now() - createdAt >= DEMO_UPI_AUTO_SETTLE_MS) {
+        updated = {
+          payment_status: 'paid',
+          status: 'paid',
+          paid_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+      }
+
+      let finalRow = o;
+      if (updated) {
+        const { data, error: ue } = await sb.from('orders').update(updated).eq('id', orderId).select('*').single();
+        if (ue) return err(ue.message, 500);
+        finalRow = data;
+        await sb.from('rest_tables').update({ status: 'available' }).eq('id', finalRow.table_id);
+      }
+
+      return json({ order: orderToApi(finalRow), payment: buildUpiPayment(finalRow) });
     }
 
     // ============ FEEDBACK ============
@@ -1082,7 +1336,7 @@ async function handler(request, { params }) {
       const history = (session?.history || []);
       const menuStr = menu.map(m => `- ${m.id} | ${m.name} ($${m.price}) [${m.category}]${m.description ? ' — ' + m.description : ''}`).join('\n');
       const cartStr = cart.length ? cart.map(c => `${c.qty}x ${c.name}`).join(', ') : '(empty)';
-      const sys = `You are a warm, witty, professional restaurant concierge for "${restaurant?.name}". Always reply in ${language === 'es' ? 'Spanish' : 'English'} (mirror the customer's language if they switch). Engage naturally, suggest pairings, mention specials, ask about allergies and spice preferences. Keep replies concise (2-4 sentences max). Sound human, not robotic.
+      const sys = `You are a warm, witty, professional restaurant concierge for "${restaurant?.name}". Always reply in ${language === 'es' ? 'Spanish' : 'English'} (mirror the customer's language if they switch). Engage naturally, suggest pairings, mention specials, ask about allergies and spice preferences. Keep replies concise (2-4 sentences max). Sound human, not robotic. If the guest asks for the menu, mention the visual menu with photos/videos available in the UI.
 
 CURRENT MENU (only recommend these; use the exact id when adding to cart):
 ${menuStr || '(menu loading)'}

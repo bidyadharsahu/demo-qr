@@ -46,7 +46,7 @@ export default function ManagerDashboard() {
   // dialogs
   const [menuOpen, setMenuOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
-  const [itemForm, setItemForm] = useState({ name: '', description: '', price: '', category: 'Mains', image: FOOD_IMG, available: true });
+  const [itemForm, setItemForm] = useState({ name: '', description: '', price: '', category: 'Mains', image: FOOD_IMG, videoUrl: '', available: true });
   const [tableOpen, setTableOpen] = useState(false);
   const [tableForm, setTableForm] = useState({ number: '', seats: 2 });
   const [tableQr, setTableQr] = useState(null);
@@ -93,6 +93,7 @@ export default function ManagerDashboard() {
     setMe(u);
     loadAll(u);
     const clockId = setInterval(() => setClock(new Date()), 1000);
+    const pollId = u?.demoMode ? setInterval(() => loadAll(u, true), 5000) : null;
     let channel;
     if (u) {
       import('@/lib/supabase').then(({ getSupabase }) => {
@@ -124,6 +125,7 @@ export default function ManagerDashboard() {
 
     return () => {
       clearInterval(clockId);
+      if (pollId) clearInterval(pollId);
       if (channel) channel.unsubscribe();
     };
   }, [router]);
@@ -150,7 +152,7 @@ export default function ManagerDashboard() {
     const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!res.ok) return toast.error('Failed');
     toast.success(editingItem ? 'Item updated' : 'Item added');
-    setMenuOpen(false); setEditingItem(null); setItemForm({ name: '', description: '', price: '', category: 'Mains', image: FOOD_IMG, available: true });
+    setMenuOpen(false); setEditingItem(null); setItemForm({ name: '', description: '', price: '', category: 'Mains', image: FOOD_IMG, videoUrl: '', available: true });
     loadAll(me);
   };
 
@@ -270,6 +272,33 @@ export default function ManagerDashboard() {
       <script>window.onload=()=>window.print()</script>
     </body></html>`);
     w.document.close();
+  };
+
+  const downloadReceipt = (order) => {
+    if (!order) return;
+    const lines = [
+      `${restaurant?.name || 'Restaurant'} Receipt`,
+      `Order: ${order.id}`,
+      `Table: ${order.tableNumber}`,
+      `Status: ${order.status}`,
+      `Payment: ${order.paymentStatus || 'unpaid'}`,
+      order.paymentReference ? `Reference: ${order.paymentReference}` : '',
+      order.paymentProvider ? `Provider: ${order.paymentProvider}` : '',
+      order.paymentMethod ? `Method: ${order.paymentMethod}` : '',
+      order.paymentVpa ? `VPA: ${order.paymentVpa}` : '',
+      `Total: $${order.total.toFixed(2)}`,
+      `Created: ${new Date(order.createdAt).toLocaleString()}`,
+      '',
+      'Items:',
+      ...(order.items || []).map((i) => `- ${i.qty}x ${i.name} (${(i.price * i.qty).toFixed(2)})`),
+    ].filter(Boolean);
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `receipt-${order.id.slice(0, 8)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const setTodayRange = () => {
@@ -467,6 +496,10 @@ export default function ManagerDashboard() {
                     {(o.allergy || o.spicyLevel) && (
                       <div className="mt-2 text-xs text-amber-300/80">{o.allergy ? `Allergy: ${o.allergy}` : ''} {o.spicyLevel ? ` · Spice: ${o.spicyLevel}` : ''}</div>
                     )}
+                    <div className="mt-2 text-xs text-white/60">
+                      Payment: <span className={`${o.paymentStatus === 'paid' ? 'text-green-300' : o.paymentStatus === 'failed' ? 'text-rose-300' : 'text-amber-300'}`}>{o.paymentStatus || 'unpaid'}</span>
+                      {o.paymentReference ? ` · Ref ${o.paymentReference}` : ''}
+                    </div>
                     <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
                       <div className="font-bold text-lg text-amber-300">${o.total.toFixed(2)}</div>
                       <div className="flex gap-1">
@@ -475,7 +508,10 @@ export default function ManagerDashboard() {
                         {o.status === 'ready' && <Button size="sm" onClick={() => setOrderStatus(o, 'served')} className="bg-green-500 hover:bg-green-400">Served</Button>}
                       </div>
                     </div>
-                    <div className="text-xs text-white/40 mt-2">{new Date(o.createdAt).toLocaleTimeString()}</div>
+                    <div className="mt-2 flex items-center justify-between text-xs text-white/40">
+                      <span>{new Date(o.createdAt).toLocaleTimeString()}</span>
+                      <button onClick={() => downloadReceipt(o)} className="text-amber-300 hover:text-amber-200">Download bill</button>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -487,7 +523,7 @@ export default function ManagerDashboard() {
             <div className="flex items-center justify-between">
               <div className="text-sm text-white/60">{menu.length} items · {menu.filter(m=>m.available).length} available</div>
               <Dialog open={menuOpen} onOpenChange={setMenuOpen}>
-                <DialogTrigger asChild><Button onClick={()=>{setEditingItem(null); setItemForm({ name:'', description:'', price:'', category:'Mains', image:FOOD_IMG, available:true })}} className="bg-amber-400 text-black hover:bg-amber-300"><Plus className="h-4 w-4 mr-1"/>Add item</Button></DialogTrigger>
+                <DialogTrigger asChild><Button onClick={()=>{setEditingItem(null); setItemForm({ name:'', description:'', price:'', category:'Mains', image:FOOD_IMG, videoUrl:'', available:true })}} className="bg-amber-400 text-black hover:bg-amber-300"><Plus className="h-4 w-4 mr-1"/>Add item</Button></DialogTrigger>
                 <DialogContent className="bg-[#111] border-white/10 text-white max-w-lg">
                   <DialogHeader><DialogTitle>{editingItem ? 'Edit item' : 'New menu item'}</DialogTitle></DialogHeader>
                   <div className="space-y-3">
@@ -524,6 +560,15 @@ export default function ManagerDashboard() {
                         <img src={itemForm.image} alt="Preview" className="h-28 w-full rounded-md object-cover"/>
                       </div>
                     )}
+                    <div>
+                      <Label>Video URL (optional)</Label>
+                      <Input value={itemForm.videoUrl} onChange={e=>setItemForm({...itemForm,videoUrl:e.target.value})} placeholder="https://...mp4" className="bg-white/5 border-white/10"/>
+                    </div>
+                    {itemForm.videoUrl && (
+                      <div className="rounded-md border border-white/10 p-2 bg-black/30">
+                        <video src={itemForm.videoUrl} controls muted className="h-32 w-full rounded-md object-cover"/>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between rounded-lg border border-white/10 p-3"><div><div className="text-sm font-medium">Available</div><div className="text-xs text-white/50">Show on customer menu</div></div><Switch checked={itemForm.available} onCheckedChange={v=>setItemForm({...itemForm,available:v})}/></div>
                   </div>
                   <DialogFooter><Button onClick={saveItem} className="bg-amber-400 text-black hover:bg-amber-300">{editingItem ? 'Save' : 'Add'}</Button></DialogFooter>
@@ -544,10 +589,11 @@ export default function ManagerDashboard() {
                       <div className="font-bold text-amber-300">${item.price.toFixed(2)}</div>
                     </div>
                     {item.description && <div className="text-xs text-white/60 mt-2 line-clamp-2">{item.description}</div>}
+                    {item.videoUrl && <div className="text-[11px] text-emerald-300/80 mt-2">Video attached</div>}
                     <div className="mt-3 flex items-center justify-between">
                       <div className="flex items-center gap-2"><Switch checked={item.available} onCheckedChange={()=>toggleAvail(item)}/><span className="text-xs text-white/60">{item.available ? 'Available' : 'Out'}</span></div>
                       <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" onClick={()=>{setEditingItem(item); setItemForm({ name:item.name, description:item.description||'', price:String(item.price), category:item.category, image:item.image||FOOD_IMG, available:item.available }); setMenuOpen(true);}}><Pencil className="h-4 w-4"/></Button>
+                        <Button size="sm" variant="ghost" onClick={()=>{setEditingItem(item); setItemForm({ name:item.name, description:item.description||'', price:String(item.price), category:item.category, image:item.image||FOOD_IMG, videoUrl:item.videoUrl||'', available:item.available }); setMenuOpen(true);}}><Pencil className="h-4 w-4"/></Button>
                         <Button size="sm" variant="ghost" className="text-rose-400" onClick={()=>removeItem(item)}><Trash2 className="h-4 w-4"/></Button>
                       </div>
                     </div>

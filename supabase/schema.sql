@@ -54,9 +54,11 @@ CREATE TABLE IF NOT EXISTS public.menu (
   price         NUMERIC(10,2) NOT NULL DEFAULT 0,
   category      TEXT DEFAULT 'Mains',
   image         TEXT DEFAULT '',
+  video_url     TEXT DEFAULT '',
   available     BOOLEAN NOT NULL DEFAULT TRUE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE public.menu ADD COLUMN IF NOT EXISTS video_url TEXT DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_menu_restaurant ON public.menu(restaurant_id);
 CREATE INDEX IF NOT EXISTS idx_menu_available  ON public.menu(restaurant_id, available);
 
@@ -87,9 +89,23 @@ CREATE TABLE IF NOT EXISTS public.orders (
   allergy       TEXT DEFAULT '',
   spicy_level   TEXT DEFAULT '',
   paid_at       TIMESTAMPTZ,
+  payment_status   TEXT NOT NULL DEFAULT 'unpaid', -- unpaid|pending|paid|failed
+  payment_reference TEXT DEFAULT '',
+  payment_provider  TEXT DEFAULT '',
+  payment_method    TEXT DEFAULT '',
+  payment_vpa       TEXT DEFAULT '',
+  payment_qr        TEXT DEFAULT '',
+  payment_created_at TIMESTAMPTZ,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ
 );
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'unpaid';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_reference TEXT DEFAULT '';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_provider TEXT DEFAULT '';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT '';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_vpa TEXT DEFAULT '';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_qr TEXT DEFAULT '';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_created_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_orders_restaurant ON public.orders(restaurant_id);
 CREATE INDEX IF NOT EXISTS idx_orders_table      ON public.orders(table_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status     ON public.orders(restaurant_id, status);

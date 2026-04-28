@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { Send, CreditCard, Star, Receipt, Utensils, ChefHat } from 'lucide-react';
+import { Send, Star, Receipt, Utensils, ChefHat, QrCode, Wallet, Download, X, PlayCircle, ExternalLink, ShoppingBag, Sparkles } from 'lucide-react';
+
+const FALLBACK_MENU_IMAGE = 'https://images.pexels.com/photos/35420084/pexels-photo-35420084.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940';
 
 export default function CustomerOrder() {
   const { tableId } = useParams();
@@ -25,7 +27,11 @@ export default function CustomerOrder() {
   const [rating, setRating] = useState(5);
   const [feedback, setFeedback] = useState('');
   const chatEndRef = useRef(null);
-  const [paymentSimulating, setPaymentSimulating] = useState(false);
+  const reminderRef = useRef(0);
+  const [showMenu, setShowMenu] = useState(false);
+  const [menuCategory, setMenuCategory] = useState('All');
+  const [payment, setPayment] = useState(null);
+  const [paymentOpen, setPaymentOpen] = useState(false);
 
   useEffect(() => {
     if (!tableId) return;
@@ -57,6 +63,17 @@ export default function CustomerOrder() {
       const r = await fetch(`/api/orders/${order.id}`, { cache: 'no-store' }).then(r => r.json());
       if (r.order) {
         setOrder(r.order);
+        if (r.order.paymentReference || r.order.paymentQr) {
+          setPayment((prev) => ({
+            reference: r.order.paymentReference || prev?.reference || '',
+            vpa: r.order.paymentVpa || prev?.vpa || '',
+            payee: restaurant?.name || prev?.payee || '',
+            amount: r.order.total?.toFixed?.(2) || prev?.amount || '',
+            status: r.order.paymentStatus || prev?.status || '',
+            upiUri: r.order.paymentQr || prev?.upiUri || '',
+            createdAt: r.order.paymentCreatedAt || prev?.createdAt || null,
+          }));
+        }
         if (r.order.status === 'ready' && stage === 'ordered') {
           setStage('served');
           setMessages(m => [...m, { role: 'assistant', text: `✨ Good news! Your food is ready. Please enjoy your meal.` }]);
@@ -64,7 +81,48 @@ export default function CustomerOrder() {
       }
     }, 4000);
     return () => clearInterval(id);
+  }, [order, stage, restaurant]);
+
+  useEffect(() => {
+    if (!order || stage !== 'paying') return;
+    let active = true;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/payment/upi/status?orderId=${order.id}`, { cache: 'no-store' });
+        const data = await res.json();
+        if (!res.ok || !active) return;
+        if (data.order) setOrder(data.order);
+        if (data.payment) setPayment(data.payment);
+        if (data.payment?.status === 'paid' || data.order?.status === 'paid') {
+          setPaymentOpen(false);
+          setStage('feedback');
+          const ref = data.payment?.reference || data.order?.paymentReference;
+          const base = ref ? `✅ Payment confirmed! Reference ${ref}.` : '✅ Payment confirmed!';
+          setMessages(m => [...m, { role: 'assistant', text: `${base} Please rate your experience.` }]);
+        }
+      } catch {
+        // Keep polling silently
+      }
+    };
+
+    poll();
+    const id = setInterval(poll, 3000);
+    return () => { active = false; clearInterval(id); };
   }, [order, stage]);
+
+  const categories = useMemo(() => {
+    const unique = Array.from(new Set((menu || []).map((m) => m.category || 'Other')));
+    return ['All', ...unique];
+  }, [menu]);
+
+  const filteredMenu = useMemo(() => {
+    if (menuCategory === 'All') return menu;
+    return (menu || []).filter((m) => (m.category || 'Other') === menuCategory);
+  }, [menu, menuCategory]);
+
+  const cartCount = useMemo(() => cart.reduce((sum, item) => sum + item.qty, 0), [cart]);
+  const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + item.price * item.qty, 0), [cart]);
 
   const mergeItemsIntoCart = (baseCart, additions = []) => {
     const next = [...baseCart.map((x) => ({ ...x }))];
@@ -79,6 +137,45 @@ export default function CustomerOrder() {
     return next;
   };
 
+  const addToCartItem = (item) => {
+    if (!item) return;
+    setCart((prev) => {
+      const next = [...prev.map((x) => ({ ...x }))];
+      const found = next.find((x) => x.id === item.id);
+      if (found) found.qty += 1;
+      else next.push({ id: item.id, name: item.name, nameEs: item.nameEs || '', price: item.price, qty: 1, notes: '' });
+      return next;
+    });
+    toast.success(`${item.name} added to cart`);
+  };
+
+  const downloadReceipt = (currentOrder, currentPayment) => {
+    if (!currentOrder) return;
+    const lines = [
+      `${restaurant?.name || 'Restaurant'} Receipt`,
+      `Order: ${currentOrder.id}`,
+      `Table: ${currentOrder.tableNumber}`,
+      `Status: ${currentOrder.status}`,
+      `Payment: ${currentOrder.paymentStatus || currentPayment?.status || 'unpaid'}`,
+      currentOrder.paymentReference || currentPayment?.reference ? `Reference: ${currentOrder.paymentReference || currentPayment?.reference}` : '',
+      currentOrder.paymentProvider ? `Provider: ${currentOrder.paymentProvider}` : '',
+      currentOrder.paymentMethod ? `Method: ${currentOrder.paymentMethod}` : '',
+      currentOrder.paymentVpa || currentPayment?.vpa ? `VPA: ${currentOrder.paymentVpa || currentPayment?.vpa}` : '',
+      `Total: $${currentOrder.total.toFixed(2)}`,
+      `Created: ${new Date(currentOrder.createdAt).toLocaleString()}`,
+      '',
+      'Items:',
+      ...(currentOrder.items || []).map((i) => `- ${i.qty}x ${i.name} (${(i.price * i.qty).toFixed(2)})`),
+    ].filter(Boolean);
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `receipt-${currentOrder.id.slice(0, 8)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const placeOrder = async (itemsOverride = null) => {
     const items = itemsOverride || cart;
     if (items.length === 0) return toast.error('Cart is empty');
@@ -89,6 +186,7 @@ export default function CustomerOrder() {
     const data = await res.json();
     if (!res.ok) return toast.error(data.error || 'Failed');
     setOrder(data.order);
+    setPayment(null);
     setStage('ordered');
     setCart([]);
     setMessages(m => [...m, { role: 'assistant', text: `✅ Awesome! I've placed your order with the kitchen (Ticket #${data.order.id.slice(0,6).toUpperCase()}). They are preparing your food now.` }]);
@@ -108,27 +206,23 @@ export default function CustomerOrder() {
     setMessages(m => [...m, { role: 'assistant', text: `Done! I've added those to your existing tab. Your new total is $${data.order.total.toFixed(2)}.` }]);
   };
 
-  const triggerPaymentFlow = () => {
-    setStage('paying');
-    setMessages(m => [...m, { role: 'assistant', text: `Redirecting to secure online payment for $${order.total.toFixed(2)}...` }]);
-    // Simulate Stripe redirect
-    setTimeout(() => {
-      setPaymentSimulating(true);
-    }, 1500);
-  };
-
-  const completeSimulatedPayment = async () => {
-    setPaymentSimulating(false);
+  const startUpiPayment = async () => {
     if (!order) return;
-    const res = await fetch('/api/payment/demo', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId: order.id }),
-    });
-    const data = await res.json();
-    if (!res.ok) return toast.error(data.error || 'Payment failed');
-    setOrder(data.order);
-    setStage('feedback');
-    setMessages(m => [...m, { role: 'assistant', text: `💳 Payment successful! Thank you so much. Could you spare a moment to rate your experience?` }]);
+    setStage('paying');
+    setMessages(m => [...m, { role: 'assistant', text: `Opening UPI payment for $${order.total.toFixed(2)}. Please complete the payment using your UPI app.` }]);
+    try {
+      const res = await fetch('/api/payment/upi/init', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) return toast.error(data.error || 'Payment init failed');
+      setOrder(data.order);
+      setPayment(data.payment || null);
+      setPaymentOpen(true);
+    } catch (e) {
+      toast.error('Unable to start UPI payment');
+    }
   };
 
   const submitFeedback = async () => {
@@ -138,11 +232,20 @@ export default function CustomerOrder() {
     });
     setStage('done');
     setMessages(m => [...m, { role: 'assistant', text: `Thank you for your feedback! 🙏 Have a wonderful day, and we hope to see you again soon.` }]);
+    setTimeout(() => {
+      try { window.close(); } catch {}
+    }, 900);
   };
 
   const sendMessage = async (textOverride = null) => {
     const text = textOverride || input.trim();
     if (!text || sending) return;
+    const lower = text.toLowerCase();
+    const wantsMenu = /\bmenu\b|show\s+me\s+the\s+menu|what\s+do\s+you\s+have|dishes|food/.test(lower);
+    if (wantsMenu) {
+      setMenuCategory('All');
+      setShowMenu(true);
+    }
     setMessages(m => [...m, { role: 'user', text }]);
     if (!textOverride) setInput('');
     setSending(true);
@@ -163,6 +266,7 @@ export default function CustomerOrder() {
       const assistantText = String(data.reply || '').trim();
       if (assistantText) {
         setMessages(m => [...m, { role: 'assistant', text: assistantText }]);
+        if (/\bmenu\b/i.test(assistantText)) setShowMenu(true);
       }
       
       let nextCart = cart;
@@ -187,7 +291,14 @@ export default function CustomerOrder() {
       }
 
       if (data.actions?.pay_now && order && order.status !== 'paid') {
-        triggerPaymentFlow();
+        startUpiPayment();
+      }
+
+      if (order && order.status !== 'paid' && (stage === 'served' || stage === 'paying')) {
+        reminderRef.current += 1;
+        if (reminderRef.current % 5 === 0) {
+          setMessages(m => [...m, { role: 'assistant', text: '⏳ Friendly reminder: your payment is still pending. You can pay anytime in this chat.' }]);
+        }
       }
     } catch (e) {
       setMessages(m => [...m, { role: 'assistant', text: 'Sorry, I lost connection for a moment. Could you say that again?' }]);
@@ -217,9 +328,25 @@ export default function CustomerOrder() {
             </div>
           </div>
           {order && (
-            <div className="text-right">
+            <div className="text-right flex flex-col items-end gap-1">
                <div className="text-xl font-black text-amber-400">${order.total.toFixed(2)}</div>
                <div className="text-[10px] text-white/50 uppercase tracking-widest">{order.status}</div>
+               <div className="text-[10px] text-amber-300 uppercase tracking-widest">payment {order.paymentStatus || payment?.status || 'pending'}</div>
+               {order.status !== 'paid' && stage !== 'paying' && stage !== 'feedback' && stage !== 'done' && (
+                 <button onClick={startUpiPayment} className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-semibold text-emerald-200 border border-emerald-400/30">
+                   <Wallet className="h-3 w-3"/>Pay now
+                 </button>
+               )}
+               {order.status !== 'paid' && stage === 'paying' && (
+                 <button onClick={() => setPaymentOpen(true)} className="mt-1 inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold text-white/80 border border-white/10">
+                   <QrCode className="h-3 w-3"/>View payment
+                 </button>
+               )}
+               {order.status === 'paid' && (
+                 <button onClick={() => downloadReceipt(order, payment)} className="mt-1 inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold text-white/80 border border-white/10">
+                   <Download className="h-3 w-3"/>Download bill
+                 </button>
+               )}
             </div>
           )}
         </div>
@@ -258,8 +385,23 @@ export default function CustomerOrder() {
       {stage === 'browsing' && !sending && cart.length === 0 && (
          <div className="px-4 pb-3 flex gap-2 overflow-x-auto hide-scrollbar whitespace-nowrap animate-in slide-in-from-bottom-4">
            <button onClick={() => sendMessage("What are your popular dishes?")} className="px-4 py-2 rounded-full bg-white/10 border border-white/10 text-sm font-medium hover:bg-white/20 transition-colors">✨ Recommendations</button>
-           <button onClick={() => sendMessage("Show me the menu")} className="px-4 py-2 rounded-full bg-white/10 border border-white/10 text-sm font-medium hover:bg-white/20 transition-colors"><Utensils className="w-3 h-3 inline mr-1.5"/> Menu</button>
+           <button onClick={() => { setMenuCategory('All'); setShowMenu(true); sendMessage("Show me the menu"); }} className="px-4 py-2 rounded-full bg-white/10 border border-white/10 text-sm font-medium hover:bg-white/20 transition-colors"><Utensils className="w-3 h-3 inline mr-1.5"/> Menu</button>
          </div>
+      )}
+
+      {cart.length > 0 && stage !== 'paying' && stage !== 'feedback' && stage !== 'done' && (
+        <div className="px-4 pb-3">
+          <div className="rounded-2xl border border-white/10 bg-[#151518] px-4 py-3 flex items-center justify-between shadow-lg shadow-black/30">
+            <div>
+              <div className="text-[11px] uppercase tracking-widest text-white/40">Cart</div>
+              <div className="text-sm font-semibold">{cartCount} items · ${cartTotal.toFixed(2)}</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowMenu(true)} className="text-xs text-white/60 hover:text-white flex items-center gap-1"><ShoppingBag className="h-3.5 w-3.5"/>View</button>
+              <Button size="sm" className="bg-amber-400 text-black hover:bg-amber-300" onClick={() => (stage === 'browsing' ? placeOrder() : addOnsAfterOrder())}>{stage === 'browsing' ? 'Place order' : 'Add to tab'}</Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Input Area */}
@@ -283,31 +425,123 @@ export default function CustomerOrder() {
         </div>
       </div>
 
-      {/* Stripe Payment Simulation Modal */}
-      {paymentSimulating && (
-        <div className="absolute inset-0 z-50 bg-[#0b0b0d] flex items-center justify-center p-6 animate-in fade-in zoom-in-95 duration-300">
-           <Card className="w-full max-w-sm bg-white rounded-3xl overflow-hidden shadow-2xl border-0">
-             <div className="bg-[#635BFF] p-6 text-white text-center">
-                <CreditCard className="w-12 h-12 mx-auto mb-3 opacity-90" />
-                <h2 className="text-xl font-bold">Secure Checkout</h2>
-                <p className="text-white/80 text-sm mt-1">{restaurant.name}</p>
-             </div>
-             <CardContent className="p-6 space-y-5 text-black">
-                <div className="flex justify-between items-end border-b border-gray-100 pb-4">
-                  <div className="text-gray-500 text-sm font-medium">Total to pay</div>
+      {/* Visual Menu Overlay */}
+      {showMenu && (
+        <div className="absolute inset-0 z-40">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShowMenu(false)} />
+          <div className="absolute bottom-0 left-0 right-0 max-h-[85%] rounded-t-3xl bg-[#111114] border-t border-white/10 overflow-y-auto">
+            <div className="sticky top-0 z-10 bg-[#111114]/95 backdrop-blur border-b border-white/10 px-4 py-4 flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.35em] text-emerald-300/80">Menu</div>
+                <div className="text-lg font-bold flex items-center gap-2"><Sparkles className="h-4 w-4"/>Full visual menu</div>
+              </div>
+              <button onClick={() => setShowMenu(false)} className="h-9 w-9 rounded-full bg-white/10 grid place-items-center hover:bg-white/20"><X className="h-4 w-4"/></button>
+            </div>
+            <div className="px-4 py-3 flex gap-2 overflow-x-auto hide-scrollbar">
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setMenuCategory(cat)}
+                  className={`px-4 py-2 rounded-full text-xs uppercase tracking-wider border ${menuCategory === cat ? 'bg-amber-400 text-black border-amber-300' : 'border-white/10 text-white/70 hover:bg-white/10'}`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+            <div className="grid gap-4 px-4 pb-6">
+              {filteredMenu.map((item) => (
+                <Card key={item.id} className="bg-black/40 border-white/10 overflow-hidden">
+                  <div className="relative h-40 overflow-hidden">
+                    <img src={item.image || FALLBACK_MENU_IMAGE} alt={item.name} className="w-full h-full object-cover" />
+                    {item.videoUrl && (
+                      <div className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full bg-black/60 px-3 py-1 text-xs text-white">
+                        <PlayCircle className="h-3.5 w-3.5"/> Video preview
+                      </div>
+                    )}
+                  </div>
+                  {item.videoUrl && (
+                    <div className="px-4 pt-4">
+                      <video src={item.videoUrl} controls muted className="w-full h-32 rounded-xl object-cover border border-white/10" />
+                    </div>
+                  )}
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-base font-semibold">{item.name}</div>
+                        <div className="text-xs text-white/50">{item.category}</div>
+                      </div>
+                      <div className="text-lg font-bold text-amber-300">${item.price.toFixed(2)}</div>
+                    </div>
+                    {item.description && <div className="text-xs text-white/60 mt-2">{item.description}</div>}
+                    <div className="mt-3 flex items-center justify-between">
+                      <Button size="sm" className="bg-amber-400 text-black hover:bg-amber-300" onClick={() => addToCartItem(item)}>Add to cart</Button>
+                      {item.videoUrl && (
+                        <a href={item.videoUrl} target="_blank" rel="noreferrer" className="text-xs text-white/60 hover:text-white inline-flex items-center gap-1">
+                          Open video <ExternalLink className="h-3 w-3"/>
+                        </a>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+              {filteredMenu.length === 0 && <div className="text-center text-white/40 py-8">No items in this category yet.</div>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* UPI Demo Payment Modal */}
+      {paymentOpen && (
+        <div className="absolute inset-0 z-50 bg-black/80 flex items-center justify-center p-5 animate-in fade-in">
+          <div className="absolute inset-0" onClick={() => setPaymentOpen(false)} />
+          <Card className="relative w-full max-w-sm bg-white rounded-3xl overflow-hidden shadow-2xl border-0">
+            <div className="bg-emerald-500 p-6 text-white text-center">
+              <QrCode className="w-12 h-12 mx-auto mb-3 opacity-90" />
+              <h2 className="text-xl font-bold">UPI Payment</h2>
+              <p className="text-white/90 text-sm mt-1">{restaurant.name}</p>
+            </div>
+            <CardContent className="p-6 space-y-4 text-black">
+              <div className="flex items-end justify-between border-b border-gray-100 pb-3">
+                <div>
+                  <div className="text-gray-500 text-xs uppercase tracking-widest">Total</div>
                   <div className="text-3xl font-black">${order?.total.toFixed(2)}</div>
                 </div>
-                <div className="space-y-3">
-                  <div className="h-12 bg-gray-100 rounded-xl w-full flex items-center px-4 text-gray-400 text-sm font-mono tracking-widest border border-gray-200">**** **** **** 4242</div>
-                  <div className="flex gap-3">
-                    <div className="h-12 bg-gray-100 rounded-xl w-1/2 flex items-center px-4 text-gray-400 text-sm border border-gray-200">MM / YY</div>
-                    <div className="h-12 bg-gray-100 rounded-xl w-1/2 flex items-center px-4 text-gray-400 text-sm border border-gray-200">CVC</div>
-                  </div>
+                <div className="text-right">
+                  <div className="text-[10px] text-gray-500 uppercase">Status</div>
+                  <div className={`text-xs font-semibold ${payment?.status === 'paid' ? 'text-emerald-600' : 'text-amber-600'}`}>{payment?.status || order?.paymentStatus || 'pending'}</div>
                 </div>
-                <Button onClick={completeSimulatedPayment} className="w-full h-12 bg-[#635BFF] hover:bg-[#524be0] text-white rounded-xl text-lg font-semibold shadow-lg shadow-[#635BFF]/30 transition-all">Pay $${order?.total.toFixed(2)}</Button>
-                <div className="text-center text-xs text-gray-400 flex items-center justify-center gap-1">Powered by <span className="font-bold text-gray-700 tracking-tight">stripe</span></div>
-             </CardContent>
-           </Card>
+              </div>
+              <div className="text-xs text-gray-500">
+                Reference: <span className="font-mono text-gray-800">{payment?.reference || order?.paymentReference || 'Generating...'}</span>
+              </div>
+              <div className="rounded-2xl bg-gray-50 border border-gray-100 p-3 text-center">
+                {payment?.upiUri || order?.paymentQr ? (
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(payment?.upiUri || order?.paymentQr || '')}`}
+                    alt="UPI QR"
+                    className="mx-auto"
+                  />
+                ) : (
+                  <div className="text-xs text-gray-400">Preparing QR...</div>
+                )}
+              </div>
+              <div className="text-xs text-gray-500 flex items-center justify-between">
+                <span>VPA: <span className="font-mono text-gray-800">{payment?.vpa || order?.paymentVpa || 'netrik@upi'}</span></span>
+                <span>Payee: {payment?.payee || 'Netrik Shop'}</span>
+              </div>
+              <div className="flex gap-2">
+                <Button asChild className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-white">
+                  <a href={payment?.upiUri || order?.paymentQr || '#'}>
+                    <ExternalLink className="h-4 w-4 mr-2" />Open UPI App
+                  </a>
+                </Button>
+                <Button variant="outline" className="border-gray-200" onClick={() => downloadReceipt(order, payment)}>
+                  <Download className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="text-center text-[11px] text-gray-400">This is a demo UPI flow. Your payment will auto-confirm in a few seconds.</div>
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -328,6 +562,19 @@ export default function CustomerOrder() {
               </div>
               <Input placeholder="Leave a nice comment (optional)..." value={feedback} onChange={e=>setFeedback(e.target.value)} className="bg-black/50 border-white/10 rounded-xl h-12 mb-4 placeholder:text-white/30 text-[15px]"/>
               <Button onClick={submitFeedback} className="w-full bg-amber-400 text-black hover:bg-amber-300 h-12 rounded-xl text-lg font-bold shadow-lg shadow-amber-400/20">Submit Feedback</Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {stage === 'done' && (
+        <div className="absolute inset-0 z-30 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
+          <Card className="bg-[#1c1c1e] border border-white/10 text-white w-full max-w-sm rounded-3xl shadow-2xl">
+            <CardContent className="p-8 text-center">
+              <Receipt className="h-10 w-10 mx-auto text-emerald-400 mb-3"/>
+              <div className="text-xl font-black">You are all set</div>
+              <div className="text-sm text-white/60 mt-2">You can close this tab now.</div>
+              <Button onClick={() => { try { window.close(); } catch {} }} className="mt-5 w-full bg-emerald-400 text-black hover:bg-emerald-300 h-11 rounded-xl">Close</Button>
             </CardContent>
           </Card>
         </div>
