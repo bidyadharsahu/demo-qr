@@ -331,8 +331,7 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "AI Waiter chat (OpenRouter / Llama 3.1 8B Instruct free)"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
