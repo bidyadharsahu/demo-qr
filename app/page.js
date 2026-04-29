@@ -46,8 +46,6 @@ const STEPS = [
   },
 ];
 
-const GALLERY = [IMG_INTERIOR, IMG_DISH, IMG_CHEF, IMG_KITCHEN, IMG_DINER, IMG_QR];
-
 export default function Home() {
   const videoRef = useRef(null);
   const [muted, setMuted] = useState(true);
@@ -111,7 +109,6 @@ export default function Home() {
             <a href="#story" className="hover:text-amber-200 transition">Story</a>
             <a href="#flow" className="hover:text-amber-200 transition">Flow</a>
             <a href="#live" className="hover:text-amber-200 transition">Live</a>
-            <a href="#gallery" className="hover:text-amber-200 transition">Gallery</a>
           </nav>
           <Link href="/login">
             <Button className="bg-amber-300 text-black hover:bg-amber-200 font-medium tracking-[0.18em] uppercase text-[11px] h-10 px-5 rounded-full">
@@ -335,23 +332,6 @@ export default function Home() {
                   <div className="netrik-display text-xl">{c.t}</div>
                   <p className="mt-2 text-sm text-white/55 font-light leading-relaxed">{c.d}</p>
                 </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* GALLERY MARQUEE */}
-      <section id="gallery" className="relative py-20 md:py-28 overflow-hidden">
-        <div data-reveal className="reveal text-center mb-12 px-6">
-          <div className="text-[10px] uppercase tracking-[0.5em] text-amber-200/80 mb-4">Moments</div>
-          <h2 className="netrik-display text-4xl md:text-5xl">A premium feel. Every service.</h2>
-        </div>
-        <div className="marquee">
-          <div className="marquee-track">
-            {[...GALLERY, ...GALLERY].map((src, i) => (
-              <div key={i} className="marquee-item">
-                <img src={src} alt="" className="h-full w-full object-cover" />
               </div>
             ))}
           </div>

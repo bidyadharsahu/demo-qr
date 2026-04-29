@@ -32,6 +32,7 @@ export default function CustomerOrder() {
   const [menuCategory, setMenuCategory] = useState('All');
   const [payment, setPayment] = useState(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [celebrate, setCelebrate] = useState(false);
 
   useEffect(() => {
     if (!tableId) return;
@@ -189,6 +190,9 @@ export default function CustomerOrder() {
     setPayment(null);
     setStage('ordered');
     setCart([]);
+    setShowMenu(false);
+    setCelebrate(true);
+    setTimeout(() => setCelebrate(false), 3200);
     setMessages(m => [...m, { role: 'assistant', text: `✅ Awesome! I've placed your order with the kitchen (Ticket #${data.order.id.slice(0,6).toUpperCase()}). They are preparing your food now.` }]);
   };
 
@@ -404,6 +408,40 @@ export default function CustomerOrder() {
         </div>
       )}
 
+      {/* Sticky Pay Now bar — always visible while order unpaid */}
+      {order && order.status !== 'paid' && (stage === 'ordered' || stage === 'served') && (
+        <div className="flex-none px-4 pb-2 z-20">
+          <button
+            onClick={startUpiPayment}
+            className="w-full group relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-black font-bold px-5 py-3.5 shadow-[0_10px_30px_rgba(16,185,129,0.35)] transition active:scale-[0.99]"
+          >
+            <span className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition" />
+            <span className="relative flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Wallet className="h-5 w-5" />
+                <span className="text-[15px] tracking-tight">Pay Now</span>
+                <span className="text-[10px] uppercase tracking-[0.3em] bg-black/15 rounded-full px-2 py-0.5 ml-1">{order.paymentStatus || payment?.status || 'pending'}</span>
+              </span>
+              <span className="text-xl font-black">${order.total.toFixed(2)}</span>
+            </span>
+          </button>
+          <div className="mt-1.5 text-center text-[10px] uppercase tracking-[0.3em] text-white/35">Pay securely · all in one chat</div>
+        </div>
+      )}
+
+      {/* Sticky Resume Payment bar — when init started but not yet paid */}
+      {order && order.status !== 'paid' && stage === 'paying' && (
+        <div className="flex-none px-4 pb-2 z-20">
+          <button
+            onClick={() => setPaymentOpen(true)}
+            className="w-full rounded-2xl bg-amber-400 hover:bg-amber-300 text-black font-bold px-5 py-3.5 shadow-[0_10px_30px_rgba(252,211,77,0.3)] flex items-center justify-between transition"
+          >
+            <span className="flex items-center gap-2"><QrCode className="h-5 w-5"/> Open payment QR</span>
+            <span className="text-xl font-black">${order.total.toFixed(2)}</span>
+          </button>
+        </div>
+      )}
+
       {/* Input Area */}
       <div className="flex-none p-4 bg-[#0b0b0d] border-t border-white/10 pb-safe z-20">
         <div className="relative flex items-center">
@@ -425,67 +463,82 @@ export default function CustomerOrder() {
         </div>
       </div>
 
-      {/* Visual Menu Overlay */}
+      {/* Visual Menu Overlay — compact, classy */}
       {showMenu && (
         <div className="absolute inset-0 z-40">
-          <div className="absolute inset-0 bg-black/70" onClick={() => setShowMenu(false)} />
-          <div className="absolute bottom-0 left-0 right-0 max-h-[85%] rounded-t-3xl bg-[#111114] border-t border-white/10 overflow-y-auto">
-            <div className="sticky top-0 z-10 bg-[#111114]/95 backdrop-blur border-b border-white/10 px-4 py-4 flex items-center justify-between">
-              <div>
-                <div className="text-xs uppercase tracking-[0.35em] text-emerald-300/80">Menu</div>
-                <div className="text-lg font-bold flex items-center gap-2"><Sparkles className="h-4 w-4"/>Full visual menu</div>
-              </div>
-              <button onClick={() => setShowMenu(false)} className="h-9 w-9 rounded-full bg-white/10 grid place-items-center hover:bg-white/20"><X className="h-4 w-4"/></button>
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setShowMenu(false)} />
+          <div className="absolute bottom-0 left-0 right-0 max-h-[88%] rounded-t-3xl bg-gradient-to-b from-[#16161a] to-[#0c0c0e] border-t border-amber-300/20 shadow-[0_-20px_60px_rgba(0,0,0,0.6)] flex flex-col animate-in slide-in-from-bottom-10 duration-400">
+            {/* drag handle */}
+            <div className="pt-2 pb-1 grid place-items-center">
+              <div className="h-1 w-12 rounded-full bg-white/20" />
             </div>
-            <div className="px-4 py-3 flex gap-2 overflow-x-auto hide-scrollbar">
+            {/* Header */}
+            <div className="flex-none px-5 pb-3 flex items-center justify-between">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.4em] text-amber-300/80">Menu</div>
+                <div className="text-xl font-bold mt-0.5 tracking-tight">{restaurant?.name || 'Our menu'}</div>
+              </div>
+              <button onClick={() => setShowMenu(false)} className="h-9 w-9 rounded-full bg-white/10 grid place-items-center hover:bg-white/20 transition" aria-label="Close menu"><X className="h-4 w-4"/></button>
+            </div>
+            {/* Sticky category bar */}
+            <div className="flex-none sticky top-0 z-10 px-5 pb-3 flex gap-2 overflow-x-auto hide-scrollbar bg-gradient-to-b from-[#16161a] to-[#16161acc]">
               {categories.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setMenuCategory(cat)}
-                  className={`px-4 py-2 rounded-full text-xs uppercase tracking-wider border ${menuCategory === cat ? 'bg-amber-400 text-black border-amber-300' : 'border-white/10 text-white/70 hover:bg-white/10'}`}
+                  className={`flex-none px-3.5 py-1.5 rounded-full text-[11px] uppercase tracking-[0.18em] border transition ${menuCategory === cat ? 'bg-amber-400 text-black border-amber-300 shadow-[0_4px_12px_rgba(252,211,77,0.35)]' : 'border-white/10 text-white/60 hover:bg-white/10'}`}
                 >
                   {cat}
                 </button>
               ))}
             </div>
-            <div className="grid gap-4 px-4 pb-6">
-              {filteredMenu.map((item) => (
-                <Card key={item.id} className="bg-black/40 border-white/10 overflow-hidden">
-                  <div className="relative h-40 overflow-hidden">
-                    <img src={item.image || FALLBACK_MENU_IMAGE} alt={item.name} className="w-full h-full object-cover" />
-                    {item.videoUrl && (
-                      <div className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full bg-black/60 px-3 py-1 text-xs text-white">
-                        <PlayCircle className="h-3.5 w-3.5"/> Video preview
-                      </div>
-                    )}
-                  </div>
-                  {item.videoUrl && (
-                    <div className="px-4 pt-4">
-                      <video src={item.videoUrl} controls muted className="w-full h-32 rounded-xl object-cover border border-white/10" />
-                    </div>
-                  )}
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-base font-semibold">{item.name}</div>
-                        <div className="text-xs text-white/50">{item.category}</div>
-                      </div>
-                      <div className="text-lg font-bold text-amber-300">${item.price.toFixed(2)}</div>
-                    </div>
-                    {item.description && <div className="text-xs text-white/60 mt-2">{item.description}</div>}
-                    <div className="mt-3 flex items-center justify-between">
-                      <Button size="sm" className="bg-amber-400 text-black hover:bg-amber-300" onClick={() => addToCartItem(item)}>Add to cart</Button>
+            {/* Compact 2-col grid */}
+            <div className="flex-1 overflow-y-auto px-4 pb-6 hide-scrollbar">
+              <div className="grid grid-cols-2 gap-3">
+                {filteredMenu.map((item) => (
+                  <div key={item.id} className="group relative rounded-2xl overflow-hidden border border-white/10 bg-[#0e0e10] hover:border-amber-300/40 transition shadow-md">
+                    <div className="relative aspect-[5/4] overflow-hidden">
+                      <img src={item.image || FALLBACK_MENU_IMAGE} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent" />
+                      <div className="absolute top-2 left-2 rounded-full bg-black/55 backdrop-blur px-2 py-0.5 text-[9px] uppercase tracking-[0.25em] text-amber-200">${item.price.toFixed(2)}</div>
                       {item.videoUrl && (
-                        <a href={item.videoUrl} target="_blank" rel="noreferrer" className="text-xs text-white/60 hover:text-white inline-flex items-center gap-1">
-                          Open video <ExternalLink className="h-3 w-3"/>
-                        </a>
+                        <div className="absolute top-2 right-2 rounded-full bg-black/55 backdrop-blur p-1.5 text-amber-200">
+                          <PlayCircle className="h-3 w-3"/>
+                        </div>
                       )}
+                      <button
+                        onClick={() => addToCartItem(item)}
+                        className="absolute bottom-2 right-2 h-8 w-8 rounded-full bg-amber-400 text-black shadow-lg shadow-amber-400/30 grid place-items-center hover:bg-amber-300 active:scale-95 transition"
+                        aria-label={`Add ${item.name} to cart`}
+                      >
+                        <span className="text-lg leading-none font-bold">+</span>
+                      </button>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-              {filteredMenu.length === 0 && <div className="text-center text-white/40 py-8">No items in this category yet.</div>}
+                    <div className="px-3 py-2.5">
+                      <div className="text-[13px] font-semibold leading-snug line-clamp-2">{item.name}</div>
+                      {item.description && <div className="text-[10.5px] text-white/45 mt-0.5 line-clamp-2 leading-snug">{item.description}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {filteredMenu.length === 0 && <div className="text-center text-white/40 py-12 text-sm">No items in this category yet.</div>}
             </div>
+            {/* Cart strip */}
+            {cart.length > 0 && (
+              <div className="flex-none border-t border-white/10 bg-[#0a0a0c] px-4 py-3 flex items-center justify-between">
+                <div>
+                  <div className="text-[10px] uppercase tracking-[0.3em] text-white/40">{cartCount} items</div>
+                  <div className="text-base font-bold text-amber-300">${cartTotal.toFixed(2)}</div>
+                </div>
+                <Button
+                  size="sm"
+                  className="bg-amber-400 text-black hover:bg-amber-300 font-semibold rounded-full px-5"
+                  onClick={() => { setShowMenu(false); (stage === 'browsing' ? placeOrder() : addOnsAfterOrder()); }}
+                >
+                  {stage === 'browsing' ? 'Place order' : 'Add to tab'}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -585,8 +638,80 @@ export default function CustomerOrder() {
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
         .pt-safe { padding-top: env(safe-area-inset-top); }
+
+        /* Celebration */
+        .burst-card {
+          animation: burst-pop 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+        }
+        @keyframes burst-pop {
+          0% { opacity: 0; transform: scale(0.6); }
+          60% { opacity: 1; transform: scale(1.06); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+        .burst-emoji {
+          position: absolute;
+          top: 50%; left: 50%;
+          font-size: 28px;
+          will-change: transform, opacity;
+          animation: burst-emoji-fly 2.2s cubic-bezier(0.2, 0.6, 0.2, 1) forwards;
+          opacity: 0;
+        }
+        @keyframes burst-emoji-fly {
+          0% { transform: translate(-50%, -50%) scale(0.4) rotate(0deg); opacity: 0; }
+          15% { opacity: 1; }
+          100% {
+            transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(1) rotate(var(--rot));
+            opacity: 0;
+          }
+        }
+        .burst-ring {
+          position: absolute; top: 50%; left: 50%;
+          width: 24px; height: 24px;
+          border-radius: 999px;
+          border: 2px solid rgba(252, 211, 77, 0.9);
+          transform: translate(-50%, -50%);
+          animation: burst-ring 1.1s ease-out forwards;
+        }
+        @keyframes burst-ring {
+          0% { opacity: 1; width: 24px; height: 24px; }
+          100% { opacity: 0; width: 360px; height: 360px; }
+        }
       `}</style>
       </div>
+
+      {/* CELEBRATION — full-screen burst when order is placed */}
+      {celebrate && (
+        <div className="absolute inset-0 z-[60] pointer-events-none flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/45 backdrop-blur-[2px]" />
+          <div className="burst-ring" />
+          <div className="burst-ring" style={{ animationDelay: '0.18s' }} />
+          {/* Emoji particles */}
+          {Array.from({ length: 28 }).map((_, i) => {
+            const emojis = ['🎉', '✨', '🥳', '🍽️', '⭐', '💛', '🎊', '🥂'];
+            const angle = (i / 28) * Math.PI * 2;
+            const dist = 140 + Math.random() * 140;
+            const tx = Math.cos(angle) * dist;
+            const ty = Math.sin(angle) * dist - 40;
+            const rot = (Math.random() * 720 - 360).toFixed(0) + 'deg';
+            const delay = (Math.random() * 0.3).toFixed(2) + 's';
+            const emoji = emojis[i % emojis.length];
+            return (
+              <span
+                key={i}
+                className="burst-emoji"
+                style={{ ['--tx']: `${tx}px`, ['--ty']: `${ty}px`, ['--rot']: rot, animationDelay: delay }}
+              >
+                {emoji}
+              </span>
+            );
+          })}
+          <div className="relative burst-card text-center px-8 py-7 rounded-3xl bg-gradient-to-br from-amber-400 to-amber-500 text-black shadow-[0_20px_60px_rgba(252,211,77,0.45)] border border-amber-200/60 max-w-[80%]">
+            <div className="text-5xl mb-1">🎉</div>
+            <div className="text-xl font-black tracking-tight">Order placed!</div>
+            <div className="text-[11px] uppercase tracking-[0.3em] mt-1 text-black/70">The kitchen has it</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
