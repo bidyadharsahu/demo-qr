@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabase, restaurantToApi, menuToApi, tableToApi, orderToApi } from '@/lib/supabase';
 import { llmChat } from '@/lib/llm';
+import { nluRespond } from '@/lib/nlu';
 import { sendRestaurantOnboardingEmail } from '@/lib/mailer';
 
 const json = (data, status = 200) => NextResponse.json(data, { status });
@@ -777,16 +778,20 @@ async function handleDemoRequest(path, method, request) {
     return json({ totalRestaurants: restaurants.length, totalRevenue, totalOrders: orders.length, mrr, byPlan, trend });
   }
 
-  // ============ AI WAITER CHAT ============
+  // ============ AI WAITER CHAT (LOCAL NLU — NO EXTERNAL API) ============
   if (path === 'chat' && method === 'POST') {
     const body = await request.json();
-    const { sessionId, restaurantId, tableId, language = 'en', message = '', menu = [] } = body;
+    const { sessionId, restaurantId, tableId, language = 'en', message = '', menu = [], cart = [], allergy = '', spicy = '', notes = '', stage = 'browsing' } = body;
     const restaurant = db.restaurants.find((r) => r.id === restaurantId);
-    const reply = buildDemoChatReply({ message, language, restaurantName: restaurant?.name, menu });
-    const actions = extractDemoChatActions(message, menu);
 
     const idx = db.chat_sessions.findIndex((s) => s.session_id === sessionId);
     const prev = idx >= 0 ? db.chat_sessions[idx] : { history: [] };
+
+    const { reply, actions } = nluRespond({
+      message, menu, cart, allergy, spicy, notes, stage,
+      restaurantName: restaurant?.name, history: prev.history || [], language,
+    });
+
     const newHistory = [...(prev.history || []), { role: 'user', content: message }, { role: 'assistant', content: reply }].slice(-30);
     const row = { session_id: sessionId, restaurant_id: restaurantId, table_id: tableId, history: newHistory, updated_at: nowIso() };
     if (idx >= 0) db.chat_sessions[idx] = row;
@@ -1327,56 +1332,22 @@ async function handler(request, { params }) {
       return json({ totalRestaurants: (restaurants || []).length, totalRevenue, totalOrders: (orders || []).length, mrr, byPlan, trend });
     }
 
-    // ============ AI WAITER CHAT ============
+    // ============ AI WAITER CHAT (LOCAL NLU — NO EXTERNAL API) ============
     if (path === 'chat' && method === 'POST') {
       const body = await request.json();
-      const { sessionId, restaurantId, tableId, language = 'en', message = '', menu = [], cart = [], stage = 'browsing' } = body;
+      const { sessionId, restaurantId, tableId, language = 'en', message = '', menu = [], cart = [], allergy = '', spicy = '', notes = '', stage = 'browsing' } = body;
       const { data: restaurant } = await sb.from('restaurants').select('name').eq('id', restaurantId).maybeSingle();
       const { data: session } = await sb.from('chat_sessions').select('*').eq('session_id', sessionId).maybeSingle();
       const history = (session?.history || []);
-      const menuStr = menu.map(m => `- ${m.id} | ${m.name} ($${m.price}) [${m.category}]${m.description ? ' — ' + m.description : ''}`).join('\n');
-      const cartStr = cart.length ? cart.map(c => `${c.qty}x ${c.name}`).join(', ') : '(empty)';
-      const sys = `You are a warm, witty, professional restaurant concierge for "${restaurant?.name}". Always reply in ${language === 'es' ? 'Spanish' : 'English'} (mirror the customer's language if they switch). Engage naturally, suggest pairings, mention specials, ask about allergies and spice preferences. Keep replies concise (2-4 sentences max). Sound human, not robotic. If the guest asks for the menu, mention the visual menu with photos/videos available in the UI.
 
-CURRENT MENU (only recommend these; use the exact id when adding to cart):
-${menuStr || '(menu loading)'}
+      const { reply, actions } = nluRespond({
+        message, menu, cart, allergy, spicy, notes, stage,
+        restaurantName: restaurant?.name, history, language,
+      });
 
-CURRENT CART: ${cartStr}
-ORDER STAGE: ${stage}
-
-    When the customer wants to perform an action, respond conversationally AND append a JSON code block with actions. Format strictly:
-\`\`\`json
-    {"add_items":[{"id":"<menu-item-id>","name":"<exact name>","quantity":1}], "set_allergy":"<text>", "set_spicy":"<mild|medium|hot|extra-hot>", "place_order":true, "pay_now":true}
-\`\`\`
-    Use \"place_order\":true when they ask to checkout/place/confirm the order.
-    Use \"pay_now\":true when they ask to pay the bill.
-    Only include keys that change. Do NOT mention the JSON to the customer.`;
-      const messages = [
-        { role: 'system', content: sys },
-        ...history.slice(-12),
-        { role: 'user', content: message },
-      ];
-      let raw;
-      try {
-        raw = await llmChat({ messages, temperature: 0.8 });
-      } catch (e) {
-        console.error('LLM err', e);
-        const fallbackReply = buildDemoChatReply({ message, language, restaurantName: restaurant?.name, menu });
-        const fallbackActions = extractDemoChatActions(message, menu);
-        const fallbackHistory = [...history, { role: 'user', content: message }, { role: 'assistant', content: fallbackReply }].slice(-30);
-        await sb.from('chat_sessions').upsert({
-          session_id: sessionId,
-          restaurant_id: restaurantId,
-          table_id: tableId,
-          history: fallbackHistory,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'session_id' });
-        return json({ reply: fallbackReply, actions: fallbackActions, fallback: true });
-      }
-      const { reply, actions } = stripJson(raw);
-      const newHistory = [...history, { role: 'user', content: message }, { role: 'assistant', content: raw }].slice(-30);
+      const newHistory = [...history, { role: 'user', content: message }, { role: 'assistant', content: reply }].slice(-30);
       await sb.from('chat_sessions').upsert({ session_id: sessionId, restaurant_id: restaurantId, table_id: tableId, history: newHistory, updated_at: new Date().toISOString() }, { onConflict: 'session_id' });
-      return json({ reply: reply || raw, actions });
+      return json({ reply, actions });
     }
 
     // ============ HEALTH ============

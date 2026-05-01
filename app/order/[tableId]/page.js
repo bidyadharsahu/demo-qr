@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { Send, Star, Receipt, Utensils, ChefHat, QrCode, Wallet, Download, X, PlayCircle, ExternalLink, ShoppingBag, Sparkles } from 'lucide-react';
+import { Send, Star, Receipt, Utensils, ChefHat, QrCode, Wallet, Download, X, PlayCircle, ExternalLink, ShoppingBag, Sparkles, Search, FileText, AlertTriangle, Flame, Pencil } from 'lucide-react';
 
 const FALLBACK_MENU_IMAGE = 'https://images.pexels.com/photos/35420084/pexels-photo-35420084.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940';
 
@@ -18,6 +18,7 @@ export default function CustomerOrder() {
   const [cart, setCart] = useState([]); // {id,name,nameEs,price,qty,notes}
   const [allergy, setAllergy] = useState('');
   const [spicy, setSpicy] = useState('');
+  const [notes, setNotes] = useState('');
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -30,8 +31,11 @@ export default function CustomerOrder() {
   const reminderRef = useRef(0);
   const [showMenu, setShowMenu] = useState(false);
   const [menuCategory, setMenuCategory] = useState('All');
+  const [menuSearch, setMenuSearch] = useState('');
   const [payment, setPayment] = useState(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [showBill, setShowBill] = useState(false);
+  const [burst, setBurst] = useState(false);
 
   useEffect(() => {
     if (!tableId) return;
@@ -117,9 +121,14 @@ export default function CustomerOrder() {
   }, [menu]);
 
   const filteredMenu = useMemo(() => {
-    if (menuCategory === 'All') return menu;
-    return (menu || []).filter((m) => (m.category || 'Other') === menuCategory);
-  }, [menu, menuCategory]);
+    let list = menu || [];
+    if (menuCategory !== 'All') list = list.filter((m) => (m.category || 'Other') === menuCategory);
+    if (menuSearch.trim()) {
+      const q = menuSearch.toLowerCase();
+      list = list.filter((m) => (m.name || '').toLowerCase().includes(q) || (m.description || '').toLowerCase().includes(q));
+    }
+    return list;
+  }, [menu, menuCategory, menuSearch]);
 
   const cartCount = useMemo(() => cart.reduce((sum, item) => sum + item.qty, 0), [cart]);
   const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + item.price * item.qty, 0), [cart]);
@@ -181,7 +190,7 @@ export default function CustomerOrder() {
     if (items.length === 0) return toast.error('Cart is empty');
     const res = await fetch('/api/orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ restaurantId: restaurant.id, tableId: table.id, items, allergy, spicyLevel: spicy }),
+      body: JSON.stringify({ restaurantId: restaurant.id, tableId: table.id, items, allergy, spicyLevel: spicy, notes }),
     });
     const data = await res.json();
     if (!res.ok) return toast.error(data.error || 'Failed');
@@ -189,7 +198,9 @@ export default function CustomerOrder() {
     setPayment(null);
     setStage('ordered');
     setCart([]);
-    setMessages(m => [...m, { role: 'assistant', text: `✅ Awesome! I've placed your order with the kitchen (Ticket #${data.order.id.slice(0,6).toUpperCase()}). They are preparing your food now.` }]);
+    setBurst(true);
+    setTimeout(() => setBurst(false), 2800);
+    setMessages(m => [...m, { role: 'assistant', text: `🎉 Order confirmed! Ticket #${data.order.id.slice(0,6).toUpperCase()} sent to the kitchen. They're cooking it now — I'll ping you the moment it's ready.` }]);
   };
 
   const addOnsAfterOrder = async (itemsOverride = null) => {
@@ -257,6 +268,7 @@ export default function CustomerOrder() {
           message: text,
           menu: menu.map(m => ({ id: m.id, name: m.name, description: m.description, price: m.price, category: m.category })),
           cart,
+          allergy, spicy, notes,
           stage,
         }),
       });
@@ -266,9 +278,8 @@ export default function CustomerOrder() {
       const assistantText = String(data.reply || '').trim();
       if (assistantText) {
         setMessages(m => [...m, { role: 'assistant', text: assistantText }]);
-        if (/\bmenu\b/i.test(assistantText)) setShowMenu(true);
       }
-      
+
       let nextCart = cart;
       if (data.actions?.add_items?.length) {
         nextCart = mergeItemsIntoCart(cart, data.actions.add_items);
@@ -277,21 +288,23 @@ export default function CustomerOrder() {
 
       if (data.actions?.set_allergy) setAllergy(data.actions.set_allergy);
       if (data.actions?.set_spicy) setSpicy(data.actions.set_spicy);
+      if (data.actions?.set_notes) setNotes(data.actions.set_notes);
+      if (data.actions?.show_menu) { setMenuCategory('All'); setShowMenu(true); }
+      if (data.actions?.clear_last) {
+        setCart((prev) => prev.slice(0, -1));
+      }
+      if (data.actions?.show_bill && order) {
+        setShowBill(true);
+      }
 
       // The AI might reply and place the order in the same turn
       if (data.actions?.place_order) {
         if (stage === 'browsing') await placeOrder(nextCart);
         else if (stage === 'ordered' || stage === 'served') await addOnsAfterOrder(nextCart);
-      } else {
-        // Show cart summary if items were added but not placed
-        if (data.actions?.add_items?.length && stage === 'browsing') {
-          const total = nextCart.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);
-          setMessages(m => [...m, { role: 'assistant', text: `Your cart is currently at $${total.toFixed(2)}. Say "place order" when you are ready!` }]);
-        }
       }
 
       if (data.actions?.pay_now && order && order.status !== 'paid') {
-        startUpiPayment();
+        setShowBill(true);
       }
 
       if (order && order.status !== 'paid' && (stage === 'served' || stage === 'paying')) {
@@ -333,8 +346,8 @@ export default function CustomerOrder() {
                <div className="text-[10px] text-white/50 uppercase tracking-widest">{order.status}</div>
                <div className="text-[10px] text-amber-300 uppercase tracking-widest">payment {order.paymentStatus || payment?.status || 'pending'}</div>
                {order.status !== 'paid' && stage !== 'paying' && stage !== 'feedback' && stage !== 'done' && (
-                 <button onClick={startUpiPayment} className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-semibold text-emerald-200 border border-emerald-400/30">
-                   <Wallet className="h-3 w-3"/>Pay now
+                 <button onClick={() => setShowBill(true)} className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-semibold text-emerald-200 border border-emerald-400/30 hover:bg-emerald-500/30 transition">
+                   <FileText className="h-3 w-3"/>View bill & pay
                  </button>
                )}
                {order.status !== 'paid' && stage === 'paying' && (
@@ -391,15 +404,36 @@ export default function CustomerOrder() {
 
       {cart.length > 0 && stage !== 'paying' && stage !== 'feedback' && stage !== 'done' && (
         <div className="px-4 pb-3">
-          <div className="rounded-2xl border border-white/10 bg-[#151518] px-4 py-3 flex items-center justify-between shadow-lg shadow-black/30">
-            <div>
-              <div className="text-[11px] uppercase tracking-widest text-white/40">Cart</div>
-              <div className="text-sm font-semibold">{cartCount} items · ${cartTotal.toFixed(2)}</div>
+          <div className="rounded-2xl border border-white/10 bg-[#151518] px-4 py-3 shadow-lg shadow-black/30">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[11px] uppercase tracking-widest text-white/40">Cart</div>
+                <div className="text-sm font-semibold">{cartCount} items · ${cartTotal.toFixed(2)}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowMenu(true)} className="text-xs text-white/60 hover:text-white flex items-center gap-1"><ShoppingBag className="h-3.5 w-3.5"/>View</button>
+                <Button size="sm" className="bg-amber-400 text-black hover:bg-amber-300" onClick={() => (stage === 'browsing' ? placeOrder() : addOnsAfterOrder())}>{stage === 'browsing' ? 'Place order' : 'Add to tab'}</Button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setShowMenu(true)} className="text-xs text-white/60 hover:text-white flex items-center gap-1"><ShoppingBag className="h-3.5 w-3.5"/>View</button>
-              <Button size="sm" className="bg-amber-400 text-black hover:bg-amber-300" onClick={() => (stage === 'browsing' ? placeOrder() : addOnsAfterOrder())}>{stage === 'browsing' ? 'Place order' : 'Add to tab'}</Button>
-            </div>
+            {(allergy || spicy || notes) && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {allergy && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-rose-400/15 border border-rose-300/30 text-rose-200 px-2 py-0.5 text-[10px]">
+                    <AlertTriangle className="h-3 w-3"/>{allergy}
+                  </span>
+                )}
+                {spicy && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/15 border border-amber-300/30 text-amber-200 px-2 py-0.5 text-[10px]">
+                    <Flame className="h-3 w-3"/>{spicy}
+                  </span>
+                )}
+                {notes && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-white/10 border border-white/15 text-white/80 px-2 py-0.5 text-[10px]">
+                    <Pencil className="h-3 w-3"/>{notes}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -429,64 +463,179 @@ export default function CustomerOrder() {
       {showMenu && (
         <div className="absolute inset-0 z-40">
           <div className="absolute inset-0 bg-black/70" onClick={() => setShowMenu(false)} />
-          <div className="absolute bottom-0 left-0 right-0 max-h-[85%] rounded-t-3xl bg-[#111114] border-t border-white/10 overflow-y-auto">
-            <div className="sticky top-0 z-10 bg-[#111114]/95 backdrop-blur border-b border-white/10 px-4 py-4 flex items-center justify-between">
-              <div>
-                <div className="text-xs uppercase tracking-[0.35em] text-emerald-300/80">Menu</div>
-                <div className="text-lg font-bold flex items-center gap-2"><Sparkles className="h-4 w-4"/>Full visual menu</div>
+          <div className="absolute bottom-0 left-0 right-0 max-h-[78%] rounded-t-3xl bg-[#111114] border-t border-white/10 overflow-hidden flex flex-col">
+            <div className="shrink-0 bg-[#111114]/95 backdrop-blur border-b border-white/10 px-4 pt-4 pb-3">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <div className="text-[10px] uppercase tracking-[0.35em] text-amber-300/80">Menu</div>
+                  <div className="text-base font-bold flex items-center gap-2"><Sparkles className="h-3.5 w-3.5"/>Browse & tap to add</div>
+                </div>
+                <button onClick={() => setShowMenu(false)} className="h-9 w-9 rounded-full bg-white/10 grid place-items-center hover:bg-white/20"><X className="h-4 w-4"/></button>
               </div>
-              <button onClick={() => setShowMenu(false)} className="h-9 w-9 rounded-full bg-white/10 grid place-items-center hover:bg-white/20"><X className="h-4 w-4"/></button>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/40" />
+                <input
+                  value={menuSearch}
+                  onChange={(e) => setMenuSearch(e.target.value)}
+                  placeholder="Search dishes..."
+                  className="w-full bg-black/40 border border-white/10 rounded-full h-10 pl-9 pr-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-amber-400 transition"
+                />
+              </div>
+              <div className="mt-3 flex gap-1.5 overflow-x-auto hide-scrollbar">
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setMenuCategory(cat)}
+                    className={`shrink-0 px-3.5 py-1.5 rounded-full text-[11px] uppercase tracking-wider border ${menuCategory === cat ? 'bg-amber-400 text-black border-amber-300' : 'border-white/10 text-white/70 hover:bg-white/10'}`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="px-4 py-3 flex gap-2 overflow-x-auto hide-scrollbar">
-              {categories.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setMenuCategory(cat)}
-                  className={`px-4 py-2 rounded-full text-xs uppercase tracking-wider border ${menuCategory === cat ? 'bg-amber-400 text-black border-amber-300' : 'border-white/10 text-white/70 hover:bg-white/10'}`}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-            <div className="grid gap-4 px-4 pb-6">
-              {filteredMenu.map((item) => (
-                <Card key={item.id} className="bg-black/40 border-white/10 overflow-hidden">
-                  <div className="relative h-40 overflow-hidden">
-                    <img src={item.image || FALLBACK_MENU_IMAGE} alt={item.name} className="w-full h-full object-cover" />
-                    {item.videoUrl && (
-                      <div className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full bg-black/60 px-3 py-1 text-xs text-white">
-                        <PlayCircle className="h-3.5 w-3.5"/> Video preview
-                      </div>
-                    )}
-                  </div>
-                  {item.videoUrl && (
-                    <div className="px-4 pt-4">
-                      <video src={item.videoUrl} controls muted className="w-full h-32 rounded-xl object-cover border border-white/10" />
-                    </div>
-                  )}
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-base font-semibold">{item.name}</div>
-                        <div className="text-xs text-white/50">{item.category}</div>
-                      </div>
-                      <div className="text-lg font-bold text-amber-300">${item.price.toFixed(2)}</div>
-                    </div>
-                    {item.description && <div className="text-xs text-white/60 mt-2">{item.description}</div>}
-                    <div className="mt-3 flex items-center justify-between">
-                      <Button size="sm" className="bg-amber-400 text-black hover:bg-amber-300" onClick={() => addToCartItem(item)}>Add to cart</Button>
+            <div className="flex-1 overflow-y-auto px-3 py-3">
+              <div className="grid grid-cols-2 gap-3">
+                {filteredMenu.map((item) => (
+                  <Card key={item.id} className="bg-black/40 border-white/10 overflow-hidden flex flex-col">
+                    <div className="relative h-24 overflow-hidden shrink-0">
+                      <img src={item.image || FALLBACK_MENU_IMAGE} alt={item.name} className="w-full h-full object-cover" />
                       {item.videoUrl && (
-                        <a href={item.videoUrl} target="_blank" rel="noreferrer" className="text-xs text-white/60 hover:text-white inline-flex items-center gap-1">
-                          Open video <ExternalLink className="h-3 w-3"/>
-                        </a>
+                        <div className="absolute bottom-1 left-1 inline-flex items-center gap-1 rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] text-white">
+                          <PlayCircle className="h-2.5 w-2.5"/> Video
+                        </div>
                       )}
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-              {filteredMenu.length === 0 && <div className="text-center text-white/40 py-8">No items in this category yet.</div>}
+                    <CardContent className="p-3 flex-1 flex flex-col">
+                      <div className="text-sm font-semibold leading-tight line-clamp-2">{item.name}</div>
+                      {item.description && <div className="text-[11px] text-white/55 mt-1 line-clamp-2">{item.description}</div>}
+                      <div className="flex items-center justify-between mt-auto pt-2">
+                        <div className="text-base font-bold text-amber-300">${item.price.toFixed(2)}</div>
+                        <button onClick={() => addToCartItem(item)} className="h-7 w-7 rounded-full bg-amber-400 text-black grid place-items-center hover:bg-amber-300 transition active:scale-95">
+                          <span className="text-base font-bold leading-none">+</span>
+                        </button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              {filteredMenu.length === 0 && <div className="text-center text-white/40 py-10 text-sm">No dishes match — try a different search or category.</div>}
             </div>
+            {cart.length > 0 && (
+              <div className="shrink-0 border-t border-white/10 bg-[#111114] px-4 py-3 flex items-center justify-between">
+                <div>
+                  <div className="text-[10px] uppercase tracking-widest text-white/40">Cart</div>
+                  <div className="text-sm font-semibold">{cartCount} items · ${cartTotal.toFixed(2)}</div>
+                </div>
+                <Button size="sm" className="bg-amber-400 text-black hover:bg-amber-300" onClick={() => { setShowMenu(false); if (stage === 'browsing') placeOrder(); else addOnsAfterOrder(); }}>{stage === 'browsing' ? 'Place order' : 'Add to tab'}</Button>
+              </div>
+            )}
           </div>
+        </div>
+      )}
+
+      {/* ========== BILL MODAL (before payment) ========== */}
+      {showBill && order && (
+        <div className="absolute inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-5 animate-in fade-in">
+          <div className="absolute inset-0" onClick={() => setShowBill(false)} />
+          <Card className="relative w-full max-w-md bg-white text-black rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-2xl border-0 max-h-[90vh] flex flex-col">
+            <div className="bg-gradient-to-br from-amber-400 to-amber-500 px-6 py-5 text-black flex items-start justify-between">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.35em] font-bold opacity-70">Itemised Bill</div>
+                <div className="text-2xl font-black tracking-tight mt-0.5">{restaurant.name}</div>
+                <div className="text-xs opacity-70 mt-0.5">Table {table.number} · Ticket #{order.id.slice(0,6).toUpperCase()}</div>
+              </div>
+              <button onClick={() => setShowBill(false)} className="h-8 w-8 rounded-full bg-black/15 hover:bg-black/25 grid place-items-center"><X className="h-4 w-4"/></button>
+            </div>
+            <CardContent className="p-0 flex-1 overflow-y-auto">
+              <div className="px-6 py-4 divide-y divide-gray-100">
+                {(order.items || []).map((it, idx) => (
+                  <div key={idx} className="py-3 flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold truncate">{it.name}</div>
+                      <div className="text-xs text-gray-500">${Number(it.price || 0).toFixed(2)} × {it.qty}</div>
+                    </div>
+                    <div className="text-sm font-bold tabular-nums">${(Number(it.price || 0) * (it.qty || 1)).toFixed(2)}</div>
+                  </div>
+                ))}
+              </div>
+              {(allergy || spicy || notes) && (
+                <div className="mx-6 mb-4 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-900 space-y-0.5">
+                  {allergy && <div>⚠ <span className="font-semibold">Allergy:</span> {allergy}</div>}
+                  {spicy && <div>🌶 <span className="font-semibold">Spice:</span> {spicy}</div>}
+                  {notes && <div>✍ <span className="font-semibold">Notes:</span> {notes}</div>}
+                </div>
+              )}
+              <div className="px-6 pb-4 space-y-1 text-sm">
+                {(() => {
+                  const subtotal = (order.items || []).reduce((s, i) => s + Number(i.price || 0) * (i.qty || 1), 0);
+                  const total = Number(order.total || subtotal);
+                  const tax = Math.max(0, total - subtotal);
+                  return (
+                    <>
+                      <div className="flex justify-between text-gray-600">
+                        <span>Subtotal</span><span className="tabular-nums">${subtotal.toFixed(2)}</span>
+                      </div>
+                      {tax > 0.001 && (
+                        <div className="flex justify-between text-gray-600">
+                          <span>Taxes & service</span><span className="tabular-nums">${tax.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-lg font-black pt-2 border-t border-gray-100 mt-2">
+                        <span>Total</span><span className="tabular-nums">${total.toFixed(2)}</span>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            </CardContent>
+            <div className="shrink-0 border-t border-gray-100 px-6 py-4 bg-white flex gap-2">
+              <Button variant="outline" className="border-gray-200 text-gray-700" onClick={() => downloadReceipt(order, payment)}>
+                <Download className="h-4 w-4 mr-1.5"/>Download
+              </Button>
+              <Button
+                className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-white font-bold h-11 rounded-xl shadow-lg shadow-emerald-500/30"
+                disabled={order.status === 'paid'}
+                onClick={async () => { setShowBill(false); await startUpiPayment(); }}
+              >
+                <Wallet className="h-4 w-4 mr-2"/>{order.status === 'paid' ? 'Already paid' : `Pay $${order.total.toFixed(2)} via UPI`}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ========== CONFETTI / SUCCESS BURST ========== */}
+      {burst && (
+        <div className="absolute inset-0 z-[60] pointer-events-none overflow-hidden">
+          <div className="absolute inset-0 bg-black/40 animate-in fade-in duration-200" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
+            <div className="text-7xl mb-3 animate-bounce">🎉</div>
+            <div className="text-2xl font-black text-white drop-shadow-lg">Order placed!</div>
+            <div className="text-sm text-amber-200 mt-1">The chef has your ticket.</div>
+          </div>
+          {Array.from({ length: 28 }).map((_, i) => {
+            const emojis = ['🎉','✨','🍽️','🥂','⭐','🍴','💫','🔥'];
+            const e = emojis[i % emojis.length];
+            const left = Math.random() * 100;
+            const delay = Math.random() * 0.4;
+            const duration = 1.4 + Math.random() * 0.8;
+            const drift = (Math.random() - 0.5) * 80;
+            return (
+              <span
+                key={i}
+                className="confetti-particle absolute text-2xl"
+                style={{
+                  left: `${left}%`,
+                  top: '-40px',
+                  animationDelay: `${delay}s`,
+                  animationDuration: `${duration}s`,
+                  '--drift': `${drift}px`,
+                }}
+              >
+                {e}
+              </span>
+            );
+          })}
         </div>
       )}
 
@@ -585,6 +734,16 @@ export default function CustomerOrder() {
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
         .pt-safe { padding-top: env(safe-area-inset-top); }
+        .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .confetti-particle {
+          animation-name: confettiFall;
+          animation-timing-function: cubic-bezier(0.32, 0.72, 0.36, 1);
+          animation-fill-mode: forwards;
+        }
+        @keyframes confettiFall {
+          0% { transform: translate(0,0) rotate(0deg); opacity: 1; }
+          100% { transform: translate(var(--drift, 0), 110vh) rotate(540deg); opacity: 0; }
+        }
       `}</style>
       </div>
     </div>
