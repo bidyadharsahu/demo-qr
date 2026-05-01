@@ -11,7 +11,7 @@ import uuid
 from typing import Dict, Any, Optional
 
 # Configuration
-BASE_URL = "https://restaurant-hub-pro.preview.emergentagent.com"
+BASE_URL = "https://qr-order-app-2.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 class NetrikShopTester:
