@@ -15,6 +15,7 @@ export default function ChefDashboard() {
   const [restaurant, setRestaurant] = useState(null);
   const [orders, setOrders] = useState([]);
   const [language, setLanguage] = useState('both');
+  const [lastOrderCount, setLastOrderCount] = useState(0);
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('netrik_user') || 'null');
@@ -46,8 +47,20 @@ export default function ChefDashboard() {
       fetch(`/api/orders?restaurantId=${u.restaurantId}`, { cache: 'no-store' }).then(r=>r.json()),
     ]);
     setRestaurant(r.restaurant);
-    setOrders((o.orders || []).filter(x => ['pending','preparing','ready'].includes(x.status)));
+    const activeOrders = (o.orders || []).filter(x => ['pending','preparing','ready'].includes(x.status));
+    setOrders(activeOrders);
+    setLastOrderCount(activeOrders.length);
   };
+
+  // Auto-print KOT when new orders arrive
+  useEffect(() => {
+    if (orders.length > lastOrderCount && lastOrderCount > 0) {
+      // New order(s) detected - auto print
+      setTimeout(() => {
+        window.print();
+      }, 500);
+    }
+  }, [orders.length, lastOrderCount]);
 
   const advance = async (o) => {
     const next = o.status === 'pending' ? 'preparing' : o.status === 'preparing' ? 'ready' : 'served';
@@ -58,7 +71,11 @@ export default function ChefDashboard() {
   const printTicket = (o) => {
     const w = window.open('', '_blank');
     if (!w) return;
-    const lines = o.items.map(i => `<tr><td>${i.qty}×</td><td><b>${i.name}</b><br/><span style='color:#888;font-size:11px'>${i.nameEs||''}</span>${i.notes?`<div style='font-size:11px'>Note: ${i.notes}</div>`:''}</td></tr>`).join('');
+    const lines = o.items.map((i, idx) => {
+      const isAdditional = i.isAdditional || false;
+      const additionalMark = isAdditional ? '<span style="color:#ff6b00;font-weight:bold;font-size:12px">[ADDITIONAL]</span>' : '';
+      return `<tr><td>${i.qty}×</td><td><b>${i.name}</b> ${additionalMark}<br/><span style='color:#888;font-size:11px'>${i.nameEs||''}</span>${i.notes?`<div style='font-size:11px'>Note: ${i.notes}</div>`:''}</td></tr>`;
+    }).join('');
     w.document.write(`<html><head><title>Ticket #${o.id.slice(0,6)}</title><style>body{font-family:monospace;width:300px;padding:10px}h2{margin:0}table{width:100%;border-collapse:collapse}td{padding:4px 0;border-bottom:1px dashed #ccc;vertical-align:top}</style></head><body>
       <h2>${restaurant?.name||''}</h2>
       <div>by Netrik Shop</div>
@@ -68,8 +85,9 @@ export default function ChefDashboard() {
       <div>${new Date(o.createdAt).toLocaleString()}</div>
       <hr/>
       <table>${lines}</table>
-      ${o.allergy?`<p><b>Allergy:</b> ${o.allergy}</p>`:''}
-      ${o.spicyLevel?`<p><b>Spice:</b> ${o.spicyLevel}</p>`:''}
+      ${o.allergy?`<p style='color:#d00'><b>⚠ Allergy:</b> ${o.allergy}</p>`:''}
+      ${o.spicyLevel?`<p style='color:#ff6600'><b>🌶 Spice:</b> ${o.spicyLevel}</p>`:''}
+      ${o.notes?`<p style='color:#0066cc'><b>✍ Notes:</b> ${o.notes}</p>`:''}
       <script>window.onload=()=>window.print()</script>
     </body></html>`);
   };
@@ -136,10 +154,11 @@ export default function ChefDashboard() {
                     </div>
                   ))}
                 </div>
-                {(o.allergy || o.spicyLevel) && (
-                  <div className="mt-3 rounded-lg bg-rose-400/10 border border-rose-400/30 p-3 text-sm">
+                {(o.allergy || o.spicyLevel || o.notes) && (
+                  <div className="mt-3 rounded-lg bg-rose-400/10 border border-rose-400/30 p-3 text-sm space-y-1">
                     {o.allergy && <div><span className="font-semibold text-rose-300">{language === 'es' ? 'Alergia' : language === 'both' ? 'Allergy / Alergia' : 'Allergy'}:</span> {o.allergy}</div>}
                     {o.spicyLevel && <div><span className="font-semibold text-rose-300">{language === 'es' ? 'Picante' : language === 'both' ? 'Spice / Picante' : 'Spice'}:</span> {o.spicyLevel}</div>}
+                    {o.notes && <div><span className="font-semibold text-amber-300">{language === 'es' ? 'Notas' : language === 'both' ? 'Notes / Notas' : 'Notes'}:</span> {o.notes}</div>}
                   </div>
                 )}
                 <div className="mt-4 flex items-center justify-between">

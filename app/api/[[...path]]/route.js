@@ -224,6 +224,12 @@ function getDemoDb() {
     orders: [],
     feedback: [],
     chat_sessions: [],
+    servers: [
+      { id: 'srv_demo_1', restaurant_id: demoRestaurantId, name: 'Aarav', user_id: 'server1', password: '123456', assigned_table_ids: ['table_demo_1', 'table_demo_2'], created_at: createdAt },
+      { id: 'srv_demo_2', restaurant_id: demoRestaurantId, name: 'Maya', user_id: 'server2', password: '123456', assigned_table_ids: ['table_demo_3', 'table_demo_4'], created_at: createdAt },
+      { id: 'srv_demo_3', restaurant_id: demoRestaurantId, name: 'Liam', user_id: 'server3', password: '123456', assigned_table_ids: ['table_demo_5', 'table_demo_6'], created_at: createdAt },
+      { id: 'srv_demo_4', restaurant_id: demoRestaurantId, name: 'Sofia', user_id: 'server4', password: '123456', assigned_table_ids: ['table_demo_7', 'table_demo_8'], created_at: createdAt },
+    ],
   };
 
   return global[DEMO_DB_KEY];
@@ -329,12 +335,53 @@ async function handleDemoRequest(path, method, request) {
       return json({ user: { id: data.id, type: 'central', userId: data.user_id, demoMode: true } });
     }
 
+    if (type === 'server') {
+      const srv = (db.servers || []).find((s) => s.user_id === userId && s.password === password);
+      if (!srv) return err('Invalid credentials', 401);
+      const rest = db.restaurants.find((r) => r.id === srv.restaurant_id);
+      return json({
+        user: {
+          type: 'server', userId, serverId: srv.id, serverName: srv.name,
+          restaurantId: srv.restaurant_id, restaurantName: rest?.name,
+          assignedTableIds: srv.assigned_table_ids || [],
+          demoMode: true,
+        },
+      });
+    }
+
     const rest = db.restaurants.find((r) => (
       (type === 'manager' && r.manager_user_id === userId && r.manager_password === password) ||
       (type === 'chef' && r.chef_user_id === userId && r.chef_password === password)
     ));
     if (!rest) return err('Invalid credentials', 401);
     return json({ user: { type, userId, restaurantId: rest.id, restaurantName: rest.name, demoMode: true } });
+  }
+
+  // ============ SERVER (waiter) ENDPOINTS ============
+  if (path === 'server/me' && method === 'GET') {
+    const url = new URL(request.url);
+    const sid = url.searchParams.get('serverId');
+    const srv = (db.servers || []).find((s) => s.id === sid);
+    if (!srv) return err('Not found', 404);
+    const tables = (db.rest_tables || []).filter((t) => (srv.assigned_table_ids || []).includes(t.id));
+    const rest = db.restaurants.find((r) => r.id === srv.restaurant_id);
+    return json({
+      server: { id: srv.id, name: srv.name, userId: srv.user_id, restaurantId: srv.restaurant_id, restaurantName: rest?.name, assignedTableIds: srv.assigned_table_ids || [] },
+      tables: tables.map((t) => ({ id: t.id, number: t.number, seats: t.seats, status: t.status, restaurantId: t.restaurant_id })),
+    });
+  }
+
+  if (path === 'server/orders' && method === 'GET') {
+    const url = new URL(request.url);
+    const sid = url.searchParams.get('serverId');
+    const srv = (db.servers || []).find((s) => s.id === sid);
+    if (!srv) return err('Not found', 404);
+    const assigned = new Set(srv.assigned_table_ids || []);
+    const orders = (db.orders || [])
+      .filter((o) => o.restaurant_id === srv.restaurant_id && assigned.has(o.table_id))
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .map(orderToApi);
+    return json({ orders });
   }
 
   // ============ RESTAURANTS ============
@@ -615,6 +662,7 @@ async function handleDemoRequest(path, method, request) {
           price: parseFloat(it.price),
           qty: parseInt(it.qty, 10) || 1,
           notes: it.notes || '',
+          isAdditional: true,
         });
       }
     }
@@ -834,6 +882,24 @@ async function handler(request, { params }) {
         if (!data) return err('Invalid credentials', 401);
         return json({ user: { id: data.id, type: 'central', userId: data.user_id } });
       }
+      if (type === 'server') {
+        // Try Supabase first, fall back to demo
+        const { data, error } = await sb.from('servers').select('*').eq('user_id', userId).eq('password', password).maybeSingle().catch(() => ({ data: null, error: { code: 'NO_TABLE' } }));
+        if (data) {
+          const { data: rest } = await sb.from('restaurants').select('id,name').eq('id', data.restaurant_id).maybeSingle();
+          return json({
+            user: {
+              type: 'server', userId, serverId: data.id, serverName: data.name,
+              restaurantId: data.restaurant_id, restaurantName: rest?.name,
+              assignedTableIds: data.assigned_table_ids || [],
+            },
+          });
+        }
+        if (DEMO_MODE_ENABLED || (error && (error.code === '42P01' || error.code === 'NO_TABLE'))) {
+          return handleDemoRequest(path, method, request);
+        }
+        return err('Invalid credentials', 401);
+      }
       const field = type === 'manager' ? 'manager_user_id' : type === 'chef' ? 'chef_user_id' : null;
       const passField = type === 'manager' ? 'manager_password' : type === 'chef' ? 'chef_password' : null;
       if (!field) return err('Invalid type');
@@ -841,6 +907,31 @@ async function handler(request, { params }) {
       if (error) return err(error.message, 500);
       if (!data) return err('Invalid credentials', 401);
       return json({ user: { type, userId, restaurantId: data.id, restaurantName: data.name } });
+    }
+
+    // ============ SERVER (waiter) ENDPOINTS — fall back to demo for cleaner experience ============
+    if ((path === 'server/me' || path === 'server/orders') && method === 'GET') {
+      try {
+        const url = new URL(request.url);
+        const sid = url.searchParams.get('serverId');
+        const { data: srv } = await sb.from('servers').select('*').eq('id', sid).maybeSingle();
+        if (srv) {
+          if (path === 'server/me') {
+            const { data: rest } = await sb.from('restaurants').select('id,name').eq('id', srv.restaurant_id).maybeSingle();
+            const { data: tables } = await sb.from('rest_tables').select('*').in('id', srv.assigned_table_ids || []);
+            return json({
+              server: { id: srv.id, name: srv.name, userId: srv.user_id, restaurantId: srv.restaurant_id, restaurantName: rest?.name, assignedTableIds: srv.assigned_table_ids || [] },
+              tables: (tables || []).map((t) => ({ id: t.id, number: t.number, seats: t.seats, status: t.status, restaurantId: t.restaurant_id })),
+            });
+          }
+          if (path === 'server/orders') {
+            const { data: orders } = await sb.from('orders').select('*').eq('restaurant_id', srv.restaurant_id).in('table_id', srv.assigned_table_ids || []).order('created_at', { ascending: false });
+            return json({ orders: (orders || []).map(orderToApi) });
+          }
+        }
+      } catch (_) { /* fall through to demo */ }
+      if (DEMO_MODE_ENABLED) return handleDemoRequest(path, method, request);
+      return err('Server endpoints require demo mode or a `servers` table', 404);
     }
 
     // ============ RESTAURANTS ============

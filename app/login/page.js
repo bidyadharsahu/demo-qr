@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { Lock, ChefHat, UserCog, ArrowLeft } from 'lucide-react';
+import { Lock, ChefHat, UserCog, ArrowLeft, UserCheck } from 'lucide-react';
 import { NetrikLogo } from '@/components/netrik-logo';
 
 export default function LoginPage() {
@@ -38,6 +38,7 @@ export default function LoginPage() {
       if (data.user.type === 'central') router.push('/central');
       else if (data.user.type === 'manager') router.push('/manager');
       else if (data.user.type === 'chef') router.push('/chef');
+      else if (data.user.type === 'server') router.push('/server');
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -74,16 +75,21 @@ export default function LoginPage() {
                 <TabsTrigger value="central" className="h-full rounded-md text-white/70 data-[state=active]:bg-amber-400 data-[state=active]:text-black">Central Login</TabsTrigger>
               </TabsList>
               {tab === 'staff' && (
-                <div className="mt-4 mb-5 grid grid-cols-2 gap-4">
+                <div className="mt-4 mb-5 grid grid-cols-3 gap-3">
                   <button type="button" onClick={() => setStaffRole('manager')} className={`min-h-[98px] rounded-xl border p-4 text-left transition ${staffRole === 'manager' ? 'border-amber-400 bg-amber-400/10' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}>
                     <UserCog className="h-5 w-5 mb-1 text-amber-300"/>
-                    <div className="font-semibold">Manager</div>
+                    <div className="font-semibold text-sm">Manager</div>
                     <div className="text-xs text-white/50">Restaurant admin</div>
                   </button>
                   <button type="button" onClick={() => setStaffRole('chef')} className={`min-h-[98px] rounded-xl border p-4 text-left transition ${staffRole === 'chef' ? 'border-amber-400 bg-amber-400/10' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}>
                     <ChefHat className="h-5 w-5 mb-1 text-amber-300"/>
-                    <div className="font-semibold">Chef</div>
+                    <div className="font-semibold text-sm">Chef</div>
                     <div className="text-xs text-white/50">Kitchen view</div>
+                  </button>
+                  <button type="button" onClick={() => setStaffRole('server')} className={`min-h-[98px] rounded-xl border p-4 text-left transition ${staffRole === 'server' ? 'border-amber-400 bg-amber-400/10' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}>
+                    <UserCheck className="h-5 w-5 mb-1 text-amber-300"/>
+                    <div className="font-semibold text-sm">Server</div>
+                    <div className="text-xs text-white/50">Waiter view</div>
                   </button>
                 </div>
               )}

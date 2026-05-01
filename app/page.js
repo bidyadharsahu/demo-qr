@@ -21,7 +21,7 @@ const BG_MUSIC = [
 
 // Step images for the Flow section
 const FLOW_IMAGES = [
-  'https://images.unsplash.com/photo-1568607184887-647b905c0966?auto=format&fit=crop&w=900&q=80',
+  'https://images.unsplash.com/photo-1600147131759-880e94a6185f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzF8MHwxfHNlYXJjaHwxfHxRUiUyMGNvZGUlMjByZXN0YXVyYW50fGVufDB8fHx8MTc3NzYyMTM1NHww&ixlib=rb-4.1.0&q=85',
   'https://images.unsplash.com/photo-1633567059020-dfc3375bd2f5?auto=format&fit=crop&w=900&q=80',
   'https://images.unsplash.com/photo-1548285181-3103ce5d3db2?auto=format&fit=crop&w=900&q=80',
   'https://images.unsplash.com/photo-1585105593056-eb01c42753f3?auto=format&fit=crop&w=900&q=80',
